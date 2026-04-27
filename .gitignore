@@ -1,0 +1,5 @@
+﻿node_modules/
+.env
+.env.local
+backend/node_modules/
+frontend/node_modules/
