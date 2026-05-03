@@ -12,6 +12,7 @@ services:
       - DB_PASSWORD=sua_senha_segura
       - DB_NAME=sistema_orcamento
       - JWT_SECRET=sua_string_longa_da_bitsz
+      - JWT_EXPIRES_IN=8h
     ports:
       - "3000:5000"
     depends_on:
