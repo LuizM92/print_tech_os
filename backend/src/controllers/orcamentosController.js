@@ -306,7 +306,7 @@ const gerarPDF = async (req, res) => {
     doc.rect(340, y, 205, 78).fill('#1a1a2e');
 
     doc.font('Helvetica').fontSize(9).fillColor('#aaa').text('Total Peças:', 350, y + 10);
-    doc.fillColor('#fff').font('Helvetica-Bold').text(fmtMoeda(orc.total_peca), 530, y + 10, { align: 'right', width: 1 });
+    //doc.fillColor('#fff').font('Helvetica-Bold').text(fmtMoeda(orc.total_peca), 530, y + 10, { align: 'right', width: 1 });
     //doc.font('Helvetica').fillColor('#aaa').text(fmtMoeda(orc.total_peca), 460, y + 10);
 
     doc.font('Helvetica').fontSize(9).fillColor('#aaa').text('Total Serviços:', 350, y + 28);
