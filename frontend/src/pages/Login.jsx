@@ -27,7 +27,7 @@ export default function Login() {
     <div className="login-page">
       <div className="login-card">
         <div className="login-logo">
-          <h1>Sistema <span className="dot">OS</span></h1>
+          <h1>Print<span style={{color:'var(--accent)'}}>Tech</span></h1>
           <p>Gestão de Orçamentos e Ordens de Serviço</p>
         </div>
 
@@ -64,8 +64,7 @@ export default function Login() {
         </form>
 
         <div style={{ marginTop: 24, padding: '16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', fontSize: 12, color: 'var(--text-muted)' }}>
-          <strong style={{ color: 'var(--text-secondary)' }}>Acesso inicial:</strong><br />
-          admin@sistema.com / admin123
+          
         </div>
       </div>
     </div>
