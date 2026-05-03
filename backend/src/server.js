@@ -7,7 +7,7 @@ const routes = require('./routes');
 const app = express();
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: ['http://localhost:3000', 'https://os.printech3d.com.br', 'http://100.127.90.13:3000'],
   credentials: true,
 }));
 
