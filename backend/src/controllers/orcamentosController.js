@@ -198,7 +198,7 @@ const gerarPDF = async (req, res) => {
     doc.rect(0, 0, doc.page.width, 100).fill('#1a1a2e');
     doc.fillColor('#ffffff').fontSize(22).font('Helvetica-Bold').text('PRINT TECH 3D', 50, 22);
     doc.fontSize(10).font('Helvetica').fillColor('#aaaacc').text('Impressão 3D & Prototipagem', 50, 48);
-    doc.fillColor('#6c63ff').fontSize(13).font('Helvetica-Bold').text('ORDEM DE SERVIÇO', 50, 66);
+    doc.fillColor('#6c63ff').fontSize(13).font('Helvetica-Bold').text('Orçamento', 50, 66);
 
     doc.fillColor('#aaaacc').fontSize(10).font('Helvetica')
       .text(orc.numero_os, 350, 35, { align: 'right', width: 200 });
