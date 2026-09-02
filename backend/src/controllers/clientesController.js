@@ -1,5 +1,6 @@
 const db = require('../utils/db');
 const { consultarCnpj } = require('../utils/consultaCnpj');
+const { extrairTexto, interpretarFicha } = require('../utils/leitorFicha');
 
 const TIPOS_DOCUMENTO = ['cpf', 'cnpj'];
 const REGIMES = ['simples', 'presumido', 'real', 'mei'];
@@ -118,6 +119,76 @@ const consultarPorCnpj = async (req, res) => {
   });
 };
 
+// ─── Leitura de ficha cadastral em PDF ──────────────────────────────────────
+/**
+ * Lê a ficha que a empresa mandou e devolve os campos para pré-preencher o formulário.
+ *
+ * Quando a ficha traz um CNPJ válido, a Receita é consultada em seguida para **completar
+ * o que a ficha deixou em branco** — a ficha tem prioridade, porque é o que a própria
+ * empresa declarou (e é de onde vêm inscrição estadual, contato e banco, que a Receita
+ * não fornece).
+ *
+ * O PDF é processado em memória e descartado: nada é gravado em disco nem enviado para
+ * fora do servidor.
+ */
+const lerFicha = async (req, res) => {
+  if (!req.file) return res.status(400).json({ erro: 'Envie o PDF da ficha cadastral' });
+
+  try {
+    const { texto, temTexto, paginas } = await extrairTexto(req.file.buffer);
+
+    if (!temTexto) {
+      return res.status(422).json({
+        erro: 'Este PDF não tem texto — provavelmente é um documento escaneado ou '
+            + 'fotografado. Peça a ficha em PDF digital, ou preencha à mão.',
+      });
+    }
+
+    const { dados, encontrados } = interpretarFicha(texto);
+
+    // Um documento qualquer pode dar um palpite solto — uma carta que termina em
+    // "Departamento Técnico" vira um "cargo". Para valer como ficha, ou tem CNPJ
+    // válido, ou tem vários campos reconhecidos. Melhor recusar do que pré-preencher
+    // o cadastro com lixo que passaria despercebido.
+    const CAMPOS_MINIMOS = 3;
+    if (!dados.cpf_cnpj && encontrados.length < CAMPOS_MINIMOS) {
+      return res.status(422).json({
+        erro: 'Não reconheci os dados de uma ficha cadastral neste PDF. Confira se é o '
+            + 'arquivo certo, ou preencha à mão.',
+      });
+    }
+
+    // Marca a origem de cada campo, para a tela poder mostrar de onde veio o quê.
+    const fontes = Object.fromEntries(encontrados.map((c) => [c, 'ficha']));
+    let complementoReceita = null;
+
+    if (dados.cpf_cnpj) {
+      const consulta = await consultarCnpj(dados.cpf_cnpj);
+      if (!consulta.erro) {
+        complementoReceita = consulta.fonte;
+        for (const [campo, valor] of Object.entries(consulta.dados)) {
+          if (valor === null || valor === undefined) continue;
+          if (dados[campo]) continue; // a ficha manda
+          dados[campo] = valor;
+          fontes[campo] = 'receita';
+        }
+      }
+    }
+
+    res.json({
+      dados,
+      fontes,
+      paginas,
+      da_ficha: Object.values(fontes).filter((f) => f === 'ficha').length,
+      da_receita: Object.values(fontes).filter((f) => f === 'receita').length,
+      complemento_receita: complementoReceita,
+    });
+  } catch (err) {
+    console.error('Falha ao ler ficha:', err.message);
+    res.status(422).json({ erro: 'Não consegui ler este arquivo. Ele é um PDF válido?' });
+  }
+};
+
 // ─── CRUD ───────────────────────────────────────────────────────────────────
 const listar = async (req, res) => {
   try {
@@ -199,4 +270,4 @@ const excluir = async (req, res) => {
   }
 };
 
-module.exports = { listar, buscarPorId, criar, atualizar, excluir, consultarPorCnpj };
+module.exports = { listar, buscarPorId, criar, atualizar, excluir, consultarPorCnpj, lerFicha };

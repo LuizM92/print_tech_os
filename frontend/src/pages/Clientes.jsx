@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import Modal, { ConfirmModal } from '../components/shared/Modal';
@@ -40,6 +40,19 @@ const vazio = {
   condicao_pagamento: '', limite_credito: '', observacoes: '',
 };
 
+/**
+ * O campo está livre para receber um dado importado?
+ *
+ * "Vazio" aqui inclui os campos que só têm o valor inicial do formulário: `estado`
+ * nasce em PR e `tipo_documento` em CPF, mas isso é padrão de tela, não escolha de
+ * quem preencheu. Sem essa distinção, uma ficha de empresa paulista seria cadastrada
+ * no Paraná e o formulário continuaria em Pessoa Física, escondendo CNPJ e IE.
+ */
+const aceitaImportado = (campo, valorAtual) => {
+  const texto = String(valorAtual ?? '').trim();
+  return texto === '' || texto === String(vazio[campo] ?? '');
+};
+
 const tituloSecao = {
   fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
   textTransform: 'uppercase', letterSpacing: '1px', margin: '4px 0 12px',
@@ -55,6 +68,9 @@ export default function Clientes() {
   const [editId, setEditId] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [consultando, setConsultando] = useState(false);
+  const [lendoFicha, setLendoFicha] = useState(false);
+  const [resumoFicha, setResumoFicha] = useState(null);
+  const inputFicha = useRef(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -75,7 +91,7 @@ export default function Clientes() {
       || (c.contato_nome || '').toLowerCase().includes(termo);
   });
 
-  const abrirNovo = () => { setForm(vazio); setEditId(null); setModal(true); };
+  const abrirNovo = () => { setForm(vazio); setEditId(null); setResumoFicha(null); setModal(true); };
 
   const abrirEdicao = (c) => {
     // Converte nulls do banco em strings, para os inputs continuarem controlados.
@@ -88,6 +104,7 @@ export default function Clientes() {
     preenchido.limite_credito = c.limite_credito != null ? String(parseFloat(c.limite_credito)) : '';
     setForm(preenchido);
     setEditId(c.id);
+    setResumoFicha(null);
     setModal(true);
   };
 
@@ -110,7 +127,7 @@ export default function Clientes() {
       const atualizado = { ...form };
       for (const [chave, valor] of Object.entries(data.dados)) {
         if (valor === null || valor === undefined || !(chave in vazio)) continue;
-        if (String(atualizado[chave] ?? '').trim() !== '') continue; // já preenchido: não toca
+        if (!aceitaImportado(chave, atualizado[chave])) continue; // já preenchido: não toca
         atualizado[chave] = valor;
         preenchidos++;
       }
@@ -128,6 +145,54 @@ export default function Clientes() {
       toast.error(err.response?.data?.erro || 'Não foi possível consultar o CNPJ');
     } finally {
       setConsultando(false);
+    }
+  };
+
+  /**
+   * Lê a ficha cadastral em PDF que a empresa mandou e completa o formulário.
+   * Mesma regra da consulta de CNPJ: só preenche o que está vazio.
+   */
+  const lerFicha = async (evento) => {
+    const arquivo = evento.target.files?.[0];
+    evento.target.value = ''; // permite reenviar o mesmo arquivo depois
+    if (!arquivo) return;
+
+    setLendoFicha(true);
+    setResumoFicha(null);
+    try {
+      const corpo = new FormData();
+      corpo.append('ficha', arquivo);
+      const { data } = await api.post('/clientes/ler-ficha', corpo);
+
+      let preenchidos = 0;
+      const ignorados = [];
+      const atualizado = { ...form };
+      for (const [chave, valor] of Object.entries(data.dados)) {
+        if (valor === null || valor === undefined || !(chave in vazio)) continue;
+        if (!aceitaImportado(chave, atualizado[chave])) {
+          if (String(atualizado[chave]) !== String(valor)) ignorados.push(chave);
+          continue;
+        }
+        atualizado[chave] = valor;
+        preenchidos++;
+      }
+      setForm(atualizado);
+      setResumoFicha({
+        arquivo: arquivo.name,
+        preenchidos,
+        ignorados: ignorados.length,
+        daFicha: data.da_ficha,
+        daReceita: data.da_receita,
+        complemento: data.complemento_receita,
+      });
+
+      toast.success(preenchidos > 0
+        ? `${preenchidos} campo(s) preenchido(s) a partir da ficha`
+        : 'A ficha foi lida, mas os campos já estavam preenchidos');
+    } catch (err) {
+      toast.error(err.response?.data?.erro || 'Não foi possível ler a ficha', { duration: 6000 });
+    } finally {
+      setLendoFicha(false);
     }
   };
 
@@ -247,6 +312,63 @@ export default function Clientes() {
 
       <Modal isOpen={modal} onClose={() => setModal(false)} title={editId ? 'Editar Cliente' : 'Novo Cliente'} size="lg">
         <form onSubmit={salvar}>
+          {/* ── Ficha em PDF ──────────────────────────────────────────── */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            background: 'var(--bg-secondary)', border: '1px dashed var(--border)',
+            borderRadius: 'var(--radius-sm)', padding: '12px 14px', marginBottom: 18,
+          }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Recebeu a ficha cadastral em PDF?</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                Leio o arquivo e preencho o formulário. Só completa campos vazios.
+              </div>
+            </div>
+            <input
+              ref={inputFicha}
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={lerFicha}
+              style={{ display: 'none' }}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => inputFicha.current?.click()}
+              disabled={lendoFicha}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              {lendoFicha ? <span className="spinner" /> : (
+                <>
+                  <svg viewBox="0 0 24 24" fill="none" style={{ width: 15, height: 15 }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke="currentColor" />
+                  </svg>
+                  Ler ficha em PDF
+                </>
+              )}
+            </button>
+          </div>
+
+          {resumoFicha && (
+            <div style={{
+              background: 'var(--success-dim)', borderRadius: 'var(--radius-sm)',
+              padding: '10px 14px', marginBottom: 18, fontSize: 12, lineHeight: 1.7,
+            }}>
+              <strong style={{ color: 'var(--success)' }}>{resumoFicha.arquivo}</strong> —{' '}
+              {resumoFicha.preenchidos} campo(s) preenchido(s).
+              <div style={{ color: 'var(--text-secondary)' }}>
+                {resumoFicha.daFicha} vindo(s) da ficha
+                {resumoFicha.daReceita > 0 && ` · ${resumoFicha.daReceita} completado(s) pela Receita`}
+                {resumoFicha.ignorados > 0 && (
+                  <> · {resumoFicha.ignorados} campo(s) já preenchido(s) foram mantidos como estavam</>
+                )}
+              </div>
+              <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>
+                Confira os dados antes de salvar — a leitura é automática e pode errar.
+              </div>
+            </div>
+          )}
+
           {/* ── Identificação ─────────────────────────────────────────── */}
           <h4 style={tituloSecao}>Identificação</h4>
 

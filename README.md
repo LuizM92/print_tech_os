@@ -196,11 +196,45 @@ CNPJ_API_TOKEN=seu_token_aqui
 A chamada externa sai do **servidor**, não do navegador: evita CORS e mantém um
 eventual token fora do frontend.
 
+### Ler a ficha cadastral em PDF
+
+Empresas costumam mandar uma ficha cadastral em PDF. O botão **Ler ficha em PDF**, no
+topo do formulário, lê o arquivo e preenche o cadastro.
+
+O leitor procura os rótulos usuais (`Razão Social:`, `CNPJ:`, `Insc. Estadual:`,
+`Banco:`…) e reconhece variações de escrita, valores na linha de baixo do rótulo, dois
+campos na mesma linha (`Cidade: Curitiba  UF: PR`) e o estado por extenso. Onde o
+rótulo falha, cai em padrões inequívocos: CNPJ com dígito verificador válido, CEP,
+e-mail e telefone.
+
+**Ficha e Receita se complementam.** Se o PDF trouxer um CNPJ válido, a Receita é
+consultada em seguida para preencher o que a ficha deixou em branco. A ficha tem
+prioridade — é o que a própria empresa declarou —, e é dela que vêm justamente os
+dados que a Receita não fornece: inscrição estadual, contato, banco e condição de
+pagamento. A tela mostra quantos campos vieram de cada fonte.
+
+Como na consulta de CNPJ, **só completa campos vazios**. Um campo que já tem valor é
+preservado, e a tela informa quantos foram mantidos como estavam.
+
+O PDF é processado em memória e descartado: não é gravado em disco nem enviado para
+fora do servidor. Limite de 8 MB por arquivo.
+
+**Limites conhecidos:**
+
+- **Ficha escaneada não dá para ler.** PDF de imagem não tem texto; o sistema detecta
+  e avisa, em vez de devolver campos vazios sem explicação. Para esses casos, peça a
+  ficha em PDF digital. (Acrescentar OCR é possível, mas é uma dependência pesada.)
+- Um PDF que não seja ficha é recusado: para valer, precisa ter CNPJ válido **ou** pelo
+  menos três campos reconhecidos. Sem essa trava, uma carta qualquer terminada em
+  "Departamento Técnico" viraria um "cargo" no cadastro.
+- A leitura é automática e pode errar em layouts fora do padrão — **confira antes de
+  salvar**. A tela avisa isso a cada leitura.
+
 ---
 
 ## Pré-requisitos
 
-- Node.js 18+
+- Node.js 20+ (o Docker usa Node 22; o 18 saiu de suporte e não roda o leitor de PDF)
 - MySQL 5.7+ ou 8.0
 - npm
 - Acesso de saída à internet no servidor (só para a consulta de CNPJ)
@@ -397,6 +431,7 @@ PUT    /api/usuarios/:id                    (admin)
 DELETE /api/usuarios/:id                    (admin)
 
 GET    /api/clientes/consulta-cnpj/:cnpj     dados públicos para pré-preencher o cadastro
+POST   /api/clientes/ler-ficha               lê a ficha cadastral em PDF (multipart: ficha)
 GET    /api/clientes
 GET    /api/clientes/:id
 POST   /api/clientes

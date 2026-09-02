@@ -1,6 +1,26 @@
 const express = require('express');
+const multer = require('multer');
 const router = express.Router();
 const { autenticar, apenasAdmin } = require('../middleware/auth');
+
+// A ficha é lida em memória e descartada — nada é gravado em disco no servidor.
+const uploadFicha = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') return cb(null, true);
+    cb(new Error('Envie um arquivo PDF'));
+  },
+}).single('ficha');
+
+/** Traduz os erros do multer (tamanho, tipo) em respostas com mensagem legível. */
+const receberFicha = (req, res, next) => uploadFicha(req, res, (err) => {
+  if (!err) return next();
+  const mensagem = err.code === 'LIMIT_FILE_SIZE'
+    ? 'O PDF passa de 8 MB. Envie um arquivo menor.'
+    : err.message;
+  res.status(400).json({ erro: mensagem });
+});
 const authCtrl = require('../controllers/authController');
 const usuariosCtrl = require('../controllers/usuariosController');
 const clientesCtrl = require('../controllers/clientesController');
@@ -23,8 +43,9 @@ router.put('/usuarios/:id', autenticar, apenasAdmin, usuariosCtrl.atualizar);
 router.delete('/usuarios/:id', autenticar, apenasAdmin, usuariosCtrl.excluir);
 
 // Clientes
-// A consulta vem antes de /:id — senão 'consulta-cnpj' seria tratado como um id.
+// As rotas nomeadas vêm antes de /:id — senão seriam tratadas como um id.
 router.get('/clientes/consulta-cnpj/:cnpj', autenticar, clientesCtrl.consultarPorCnpj);
+router.post('/clientes/ler-ficha', autenticar, receberFicha, clientesCtrl.lerFicha);
 router.get('/clientes', autenticar, clientesCtrl.listar);
 router.get('/clientes/:id', autenticar, clientesCtrl.buscarPorId);
 router.post('/clientes', autenticar, clientesCtrl.criar);
