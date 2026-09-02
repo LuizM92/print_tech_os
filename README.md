@@ -495,16 +495,37 @@ POST /api/orcamentos-venda
 
 ## Deploy com Docker
 
-```bash
-docker compose up -d --build
-```
-
 O Dockerfile faz o build do React e o Express serve o resultado junto com a API na
-mesma porta. As migrações **não** rodam sozinhas — execute dentro do container:
+mesma porta. As migrações **não** rodam sozinhas.
+
+**A ordem importa.** Subir o app antes de migrar deixa uma janela em que o código novo
+procura colunas que ainda não existem — o sistema quebra até a migração terminar. Por
+isso o app é parado antes, e só volta depois do banco estar atualizado:
 
 ```bash
-docker compose exec app npm run migrate
+docker compose exec db mysqldump -u root -p sistema_orcamento > backup_$(date +%F).sql
 ```
+
+```bash
+git pull && docker compose stop app && docker compose build app
+```
+
+```bash
+docker compose run --rm app npm run migrate
+```
+
+```bash
+docker compose up -d
+```
+
+Confira o resultado com as queries da seção **Migrações** antes de rodar
+`npm run migrate:limpeza`, que é a única etapa destrutiva.
+
+Se algo sair errado: `docker compose down`, restaure o dump e volte o código com
+`git checkout <commit anterior>`.
+
+O deploy precisa de **saída para a internet** no servidor — só a consulta de CNPJ
+depende disso; o resto do sistema funciona sem.
 
 ### Antes de expor em produção
 
