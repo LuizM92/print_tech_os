@@ -3,8 +3,9 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import Modal, { ConfirmModal } from '../components/shared/Modal';
 import toast from 'react-hot-toast';
+import { fmtNum } from '../utils/format';
 
-const fmtMoeda = (v) => `R$ ${parseFloat(v).toFixed(4).replace('.', ',')}`;
+const fmtMoeda = (v) => `R$ ${fmtNum(v, 4)}`; // custo por grama usa 4 casas
 
 export default function Materiais() {
   const [materiais, setMateriais] = useState([]);

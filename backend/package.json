@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "migrate": "node src/utils/migrate.js"
+    "migrate": "node src/utils/migrate.js",
+    "migrate:limpeza": "node src/utils/migrate.js --manuais",
+    "test": "node --test"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

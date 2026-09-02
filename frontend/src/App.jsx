@@ -10,7 +10,10 @@ import Materiais from './pages/Materiais';
 import Servicos from './pages/Servicos';
 import Usuarios from './pages/Usuarios';
 import Orcamentos from './pages/Orcamentos';
-import NovoOrcamento from './pages/NovoOrcamento';
+import EditorOrcamento from './pages/EditorOrcamento';
+import EditorOrcamentoVenda from './pages/EditorOrcamentoVenda';
+import Vendas from './pages/Vendas';
+import Produtos from './pages/Produtos';
 import DetalheOrcamento from './pages/DetalheOrcamento';
 import Configuracoes from './pages/Configuracoes';
 import './index.css';
@@ -46,8 +49,13 @@ function AppRoutes() {
       <Route path="/materiais" element={<PrivateRoute><AppLayout><Materiais /></AppLayout></PrivateRoute>} />
       <Route path="/servicos" element={<PrivateRoute><AppLayout><Servicos /></AppLayout></PrivateRoute>} />
       <Route path="/orcamentos" element={<PrivateRoute><AppLayout><Orcamentos /></AppLayout></PrivateRoute>} />
-      <Route path="/orcamentos/novo" element={<PrivateRoute><AppLayout><NovoOrcamento /></AppLayout></PrivateRoute>} />
+      <Route path="/orcamentos/novo" element={<PrivateRoute><AppLayout><EditorOrcamento /></AppLayout></PrivateRoute>} />
+      <Route path="/orcamentos/:id/editar" element={<PrivateRoute><AppLayout><EditorOrcamento /></AppLayout></PrivateRoute>} />
       <Route path="/orcamentos/:id" element={<PrivateRoute><AppLayout><DetalheOrcamento /></AppLayout></PrivateRoute>} />
+      <Route path="/vendas" element={<PrivateRoute><AppLayout><Vendas /></AppLayout></PrivateRoute>} />
+      <Route path="/vendas/novo" element={<PrivateRoute><AppLayout><EditorOrcamentoVenda /></AppLayout></PrivateRoute>} />
+      <Route path="/vendas/:id/editar" element={<PrivateRoute><AppLayout><EditorOrcamentoVenda /></AppLayout></PrivateRoute>} />
+      <Route path="/produtos" element={<PrivateRoute><AppLayout><Produtos /></AppLayout></PrivateRoute>} />
       <Route path="/usuarios" element={<PrivateRoute adminOnly><AppLayout><Usuarios /></AppLayout></PrivateRoute>} />
       <Route path="/configuracoes" element={<PrivateRoute><AppLayout><Configuracoes /></AppLayout></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" />} />

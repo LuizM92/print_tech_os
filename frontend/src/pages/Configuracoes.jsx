@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
-
-const fmtMoeda = (v) => `R$ ${parseFloat(v || 0).toFixed(2).replace('.', ',')}`;
+import { fmtMoeda } from '../utils/format';
 
 export default function Configuracoes() {
   const [valorHoraMaquina, setValorHoraMaquina] = useState('');

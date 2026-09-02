@@ -3,8 +3,8 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import Modal, { ConfirmModal } from '../components/shared/Modal';
 import toast from 'react-hot-toast';
+import { fmtMoeda } from '../utils/format';
 
-const fmtMoeda = (v) => `R$ ${parseFloat(v).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 
 export default function Servicos() {
   const [servicos, setServicos] = useState([]);

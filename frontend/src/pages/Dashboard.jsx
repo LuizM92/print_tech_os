@@ -1,63 +1,61 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
-
-const fmtMoeda = (v) => `R$ ${parseFloat(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
-const fmtData = (d) => new Date(d).toLocaleDateString('pt-BR');
+import { fmtMoeda, fmtData, badgeClass, rotuloStatus } from '../utils/format';
 
 export default function Dashboard() {
-  const [stats, setStats] = useState({ orcamentos: 0, clientes: 0, aprovados: 0, totalGeral: 0 });
-  const [recentes, setRecentes] = useState([]);
+  const [resumo, setResumo] = useState(null);
   const { usuario } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [orc, cli] = await Promise.all([
-          api.get('/orcamentos'),
-          api.get('/clientes'),
-        ]);
-        const orcamentos = orc.data;
-        const aprovados = orcamentos.filter(o => o.status === 'aprovado');
-        const total = orcamentos.reduce((acc, o) => acc + parseFloat(o.total_geral || 0), 0);
-        setStats({ orcamentos: orcamentos.length, clientes: cli.data.length, aprovados: aprovados.length, totalGeral: total });
-        setRecentes(orcamentos.slice(0, 8));
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    load();
+    // As somas vêm agregadas do banco — antes o dashboard baixava a tabela inteira
+    // de orçamentos só para contar quatro números.
+    api.get('/orcamentos/resumo')
+      .then((res) => setResumo(res.data))
+      .catch((err) => console.error(err));
   }, []);
 
-  const badgeClass = (status) => ({ rascunho: 'badge-rascunho', aprovado: 'badge-aprovado', reprovado: 'badge-reprovado', cancelado: 'badge-cancelado' }[status] || 'badge-rascunho');
+  const cards = [
+    { rotulo: 'Impressão', valor: resumo?.impressao ?? 0, classe: 'accent' },
+    { rotulo: 'Vendas', valor: resumo?.venda ?? 0, classe: 'accent' },
+    { rotulo: 'Aprovados', valor: resumo?.aprovados ?? 0, classe: 'success' },
+    { rotulo: 'Clientes', valor: resumo?.clientes ?? 0, classe: '' },
+    {
+      rotulo: 'Volume Aprovado',
+      valor: fmtMoeda(resumo?.volume_aprovado),
+      classe: '',
+      pequeno: true,
+      detalhe: resumo && (parseFloat(resumo.volume_impressao) > 0 || parseFloat(resumo.volume_venda) > 0)
+        ? `Impressão ${fmtMoeda(resumo.volume_impressao)} · Venda ${fmtMoeda(resumo.volume_venda)}`
+        : null,
+    },
+  ];
 
   return (
     <>
       <div className="page-header">
         <h2>Dashboard</h2>
-        <p>Bem-vindo, <strong>{usuario?.nome}</strong> — {new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        <p>
+          Bem-vindo, <strong>{usuario?.nome}</strong> —{' '}
+          {new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        </p>
       </div>
 
       <div className="page-content">
         <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-label">Total Orçamentos</div>
-            <div className="stat-value accent">{stats.orcamentos}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Clientes</div>
-            <div className="stat-value">{stats.clientes}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Aprovados</div>
-            <div className="stat-value success">{stats.aprovados}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Volume Total</div>
-            <div className="stat-value" style={{ fontSize: 18 }}>{fmtMoeda(stats.totalGeral)}</div>
-          </div>
+          {cards.map((c) => (
+            <div className="stat-card" key={c.rotulo}>
+              <div className="stat-label">{c.rotulo}</div>
+              <div className={`stat-value ${c.classe}`} style={c.pequeno ? { fontSize: 18 } : undefined}>
+                {c.valor}
+              </div>
+              {c.detalhe && (
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>{c.detalhe}</div>
+              )}
+            </div>
+          ))}
         </div>
 
         <div className="card">
@@ -69,24 +67,30 @@ export default function Dashboard() {
             <table>
               <thead>
                 <tr>
-                  <th>Nº OS</th>
+                  <th>Nº Orçamento</th>
+                  <th>Nº OS / Pedido</th>
                   <th>Cliente</th>
-                  <th>Material</th>
+                  <th>Itens</th>
                   <th>Total Geral</th>
                   <th>Status</th>
                   <th>Data</th>
                 </tr>
               </thead>
               <tbody>
-                {recentes.length === 0 ? (
-                  <tr><td colSpan={6}><div className="empty-state"><p>Nenhum orçamento ainda</p></div></td></tr>
-                ) : recentes.map(o => (
+                {!resumo?.recentes?.length ? (
+                  <tr><td colSpan={7}><div className="empty-state"><p>Nenhum orçamento ainda</p></div></td></tr>
+                ) : resumo.recentes.map((o) => (
                   <tr key={o.id} onClick={() => navigate(`/orcamentos/${o.id}`)} style={{ cursor: 'pointer' }}>
-                    <td><span className="font-mono" style={{ fontSize: 12, color: 'var(--accent)' }}>{o.numero_os}</span></td>
+                    <td><span className="font-mono" style={{ fontSize: 12, color: 'var(--accent)' }}>{o.numero_orcamento}</span></td>
+                    <td>
+                      {o.numero_aprovado
+                        ? <span className="font-mono" style={{ fontSize: 12, color: 'var(--success)', fontWeight: 700 }}>{o.numero_aprovado}</span>
+                        : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                    </td>
                     <td>{o.cliente_nome}</td>
-                    <td>{o.material_nome}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{o.qtd_itens}</td>
                     <td className="text-success fw-bold">{fmtMoeda(o.total_geral)}</td>
-                    <td><span className={`badge ${badgeClass(o.status)}`}>{o.status}</span></td>
+                    <td><span className={`badge ${badgeClass(o.status)}`}>{rotuloStatus(o.status)}</span></td>
                     <td>{fmtData(o.criado_em)}</td>
                   </tr>
                 ))}

@@ -3,8 +3,9 @@ import api from '../services/api';
 import Modal, { ConfirmModal } from '../components/shared/Modal';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
+import { fmtData } from '../utils/format';
 
-const fmtData = (d) => new Date(d).toLocaleDateString('pt-BR');
+
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);

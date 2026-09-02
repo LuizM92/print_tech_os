@@ -7,6 +7,8 @@ const clientesCtrl = require('../controllers/clientesController');
 const materiaisCtrl = require('../controllers/materiaisController');
 const servicosCtrl = require('../controllers/servicosController');
 const orcamentosCtrl = require('../controllers/orcamentosController');
+const orcamentosVendaCtrl = require('../controllers/orcamentosVendaController');
+const produtosCtrl = require('../controllers/produtosController');
 const configCtrl = require('../controllers/configuracoesController');
 
 // Auth
@@ -43,11 +45,30 @@ router.delete('/servicos/:id', autenticar, apenasAdmin, servicosCtrl.excluir);
 router.get('/configuracoes', autenticar, configCtrl.listar);
 router.post('/configuracoes', autenticar, apenasAdmin, configCtrl.atualizar);
 
-// Orçamentos
+// Produtos (catálogo para os orçamentos de venda)
+router.get('/produtos', autenticar, produtosCtrl.listar);
+router.post('/produtos', autenticar, apenasAdmin, produtosCtrl.criar);
+router.put('/produtos/:id', autenticar, apenasAdmin, produtosCtrl.atualizar);
+router.delete('/produtos/:id', autenticar, apenasAdmin, produtosCtrl.excluir);
+
+// Orçamentos — compartilhado pelos dois tipos (impressão e venda)
+// /resumo vem antes de /:id — senão o Express trata 'resumo' como um id.
+router.get('/orcamentos/resumo', autenticar, orcamentosCtrl.resumo);
 router.get('/orcamentos', autenticar, orcamentosCtrl.listar);
 router.get('/orcamentos/:id', autenticar, orcamentosCtrl.buscarPorId);
+router.patch('/orcamentos/:id/status', autenticar, orcamentosCtrl.alterarStatus);
+router.delete('/orcamentos/:id', autenticar, apenasAdmin, orcamentosCtrl.excluir);
+router.get('/orcamentos/:id/pdf', autenticar, orcamentosCtrl.gerarPDF);
+
+// Orçamento de impressão — itens com material, peso e horas
 router.post('/orcamentos', autenticar, orcamentosCtrl.criar);
 router.put('/orcamentos/:id', autenticar, orcamentosCtrl.atualizar);
-router.get('/orcamentos/:id/pdf', autenticar, orcamentosCtrl.gerarPDF);
+router.post('/orcamentos/:id/reprecificar', autenticar, orcamentosCtrl.reprecificar);
+
+// Orçamento de venda — itens de produto, com desconto
+// Caminho próprio (não /orcamentos/venda) para não colidir com /orcamentos/:id.
+router.post('/orcamentos-venda', autenticar, orcamentosVendaCtrl.criar);
+router.put('/orcamentos-venda/:id', autenticar, orcamentosVendaCtrl.atualizar);
+router.post('/orcamentos-venda/:id/reprecificar', autenticar, orcamentosVendaCtrl.reprecificar);
 
 module.exports = router;
