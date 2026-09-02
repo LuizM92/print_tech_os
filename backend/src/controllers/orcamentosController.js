@@ -3,10 +3,12 @@ const PDFDocument = require('pdfkit');
 const { buscarPorChave } = require('./configuracoesController');
 const { recalcularOrcamento } = require('../utils/calculoOrcamento');
 const { proximoNumero, registrarHistorico, rotulos } = require('../utils/documentos');
+const {
+  construirFiltro, granularidade, FORMATO_PERIODO,
+} = require('../utils/filtroOrcamentos');
 
 const STATUS_VALIDOS = ['rascunho', 'aprovado', 'reprovado', 'cancelado'];
 const TIPOS_PECA = ['tecnica', 'decorativa'];
-const TIPOS_ORCAMENTO = ['impressao', 'produto'];
 
 // ─── Validação do payload ───────────────────────────────────────────────────
 const validarServico = (servico, onde) => {
@@ -138,26 +140,9 @@ const listar = async (req, res) => {
   try {
     const pagina = Math.max(parseInt(req.query.pagina, 10) || 1, 1);
     const porPagina = Math.min(Math.max(parseInt(req.query.porPagina, 10) || 30, 1), 100);
-    const { status, busca, tipo } = req.query;
 
-    const where = [];
-    const params = [];
-
-    // Impressão e venda vivem na mesma tabela, mas cada tela lista só o seu tipo.
-    if (TIPOS_ORCAMENTO.includes(tipo)) {
-      where.push('o.tipo = ?');
-      params.push(tipo);
-    }
-    if (status && STATUS_VALIDOS.includes(status)) {
-      where.push('o.status = ?');
-      params.push(status);
-    }
-    if (busca) {
-      where.push('(o.numero_orcamento LIKE ? OR o.numero_os LIKE ? OR o.numero_pedido LIKE ? OR c.nome LIKE ?)');
-      const termo = `%${busca}%`;
-      params.push(termo, termo, termo, termo);
-    }
-    const filtro = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    // Mesmo construtor do dashboard: a listagem aceita todos os filtros que ele aceita.
+    const { clausula: filtro, params } = construirFiltro(req.query);
 
     const [[{ total }]] = await db.query(
       `SELECT COUNT(*) AS total FROM orcamentos o JOIN clientes c ON o.cliente_id = c.id ${filtro}`,
@@ -194,22 +179,78 @@ const listar = async (req, res) => {
   }
 };
 
-// Agregações no banco — o dashboard não precisa baixar a tabela inteira para somar.
+/**
+ * Números do dashboard, todos calculados no banco e todos obedecendo aos mesmos
+ * filtros — cartões, indicadores, gráfico, ranking e lista falam do mesmo recorte.
+ *
+ * A contagem de clientes é a única exceção: é o total de clientes ativos do cadastro,
+ * não "clientes que aparecem no filtro". Quando há filtro de período ou cliente, a
+ * resposta traz também `clientes_no_periodo`, que é quantos de fato movimentaram.
+ */
 const resumo = async (req, res) => {
   try {
+    const { clausula, params, ativos } = construirFiltro(req.query);
+    // A listagem junta `clientes` para permitir busca por nome; aqui também, para que
+    // o mesmo construtor de filtro sirva aos dois sem cláusula sobrando.
+    const base = `FROM orcamentos o JOIN clientes c ON o.cliente_id = c.id ${clausula}`;
+
     const [[totais]] = await db.query(`
       SELECT COUNT(*) AS orcamentos,
-             SUM(status = 'aprovado') AS aprovados,
-             SUM(status = 'rascunho') AS rascunhos,
-             SUM(tipo = 'impressao') AS impressao,
-             SUM(tipo = 'produto') AS venda,
-             COALESCE(SUM(total_geral), 0) AS volume_total,
-             COALESCE(SUM(CASE WHEN status = 'aprovado' THEN total_geral ELSE 0 END), 0) AS volume_aprovado,
-             COALESCE(SUM(CASE WHEN status = 'aprovado' AND tipo = 'impressao' THEN total_geral ELSE 0 END), 0) AS volume_impressao,
-             COALESCE(SUM(CASE WHEN status = 'aprovado' AND tipo = 'produto' THEN total_geral ELSE 0 END), 0) AS volume_venda
-        FROM orcamentos
-    `);
+             SUM(o.status = 'aprovado') AS aprovados,
+             SUM(o.status = 'rascunho') AS rascunhos,
+             SUM(o.status = 'reprovado') AS reprovados,
+             SUM(o.tipo = 'impressao') AS impressao,
+             SUM(o.tipo = 'produto') AS venda,
+             COUNT(DISTINCT o.cliente_id) AS clientes_no_periodo,
+             COALESCE(SUM(o.total_geral), 0) AS volume_total,
+             COALESCE(SUM(CASE WHEN o.status = 'aprovado' THEN o.total_geral ELSE 0 END), 0) AS volume_aprovado,
+             COALESCE(SUM(CASE WHEN o.status = 'aprovado' AND o.tipo = 'impressao' THEN o.total_geral ELSE 0 END), 0) AS volume_impressao,
+             COALESCE(SUM(CASE WHEN o.status = 'aprovado' AND o.tipo = 'produto' THEN o.total_geral ELSE 0 END), 0) AS volume_venda,
+             COALESCE(AVG(o.total_geral), 0) AS ticket_medio,
+             COALESCE(AVG(CASE WHEN o.status = 'aprovado' THEN o.total_geral END), 0) AS ticket_medio_aprovado
+        ${base}
+    `, params);
+
+    // O MySQL devolve SUM()/AVG() como DECIMAL, e o driver entrega string. Sem
+    // converter, quem consumir recebe "0" onde espera 0 — e comparações estritas
+    // falham em silêncio. Contagem vira inteiro; dinheiro vira número com centavos.
+    const inteiros = ['orcamentos', 'aprovados', 'rascunhos', 'reprovados',
+      'impressao', 'venda', 'clientes_no_periodo'];
+    const decimais = ['volume_total', 'volume_aprovado', 'volume_impressao',
+      'volume_venda', 'ticket_medio', 'ticket_medio_aprovado'];
+    for (const campo of inteiros) totais[campo] = parseInt(totais[campo], 10) || 0;
+    for (const campo of decimais) totais[campo] = Math.round((parseFloat(totais[campo]) || 0) * 100) / 100;
+
+    // Taxa de aprovação: dos orçamentos do recorte, quantos viraram documento fechado.
+    const taxa_aprovacao = totais.orcamentos > 0
+      ? Math.round((totais.aprovados / totais.orcamentos) * 1000) / 10
+      : 0;
+
     const [[{ clientes }]] = await db.query('SELECT COUNT(*) AS clientes FROM clientes WHERE ativo = 1');
+
+    // ── Série do gráfico ────────────────────────────────────────────────
+    const escala = granularidade(req.query.de, req.query.ate);
+    const [serie] = await db.query(`
+      SELECT DATE_FORMAT(o.criado_em, '${FORMATO_PERIODO[escala]}') AS periodo,
+             COUNT(*) AS qtd,
+             COALESCE(SUM(o.total_geral), 0) AS valor,
+             COALESCE(SUM(CASE WHEN o.status = 'aprovado' THEN o.total_geral ELSE 0 END), 0) AS valor_aprovado
+        ${base}
+       GROUP BY periodo
+       ORDER BY periodo
+    `, params);
+
+    // ── Ranking de clientes ─────────────────────────────────────────────
+    const [top_clientes] = await db.query(`
+      SELECT c.id, c.nome, c.nome_fantasia,
+             COUNT(*) AS qtd,
+             COALESCE(SUM(o.total_geral), 0) AS valor,
+             COALESCE(SUM(CASE WHEN o.status = 'aprovado' THEN o.total_geral ELSE 0 END), 0) AS valor_aprovado
+        ${base}
+       GROUP BY c.id, c.nome, c.nome_fantasia
+       ORDER BY valor_aprovado DESC, valor DESC
+       LIMIT 5
+    `, params);
 
     const [recentes] = await db.query(`
       SELECT o.id, o.tipo, o.numero_orcamento, o.numero_os, o.numero_pedido,
@@ -218,13 +259,29 @@ const resumo = async (req, res) => {
              COALESCE(o.numero_pedido, o.numero_os) AS numero_aprovado,
              (SELECT COUNT(*) FROM orcamento_itens i WHERE i.orcamento_id = o.id)
                + (SELECT COUNT(*) FROM orcamento_produtos p WHERE p.orcamento_id = o.id) AS qtd_itens
-        FROM orcamentos o
-        JOIN clientes c ON o.cliente_id = c.id
+        ${base}
        ORDER BY o.criado_em DESC
-       LIMIT 8
-    `);
+       LIMIT 10
+    `, params);
 
-    res.json({ ...totais, clientes, recentes });
+    // Mesma conversão nas séries e no ranking, pelo mesmo motivo.
+    const emNumero = (linhas, inteiros, decimais) => linhas.map((l) => {
+      const saida = { ...l };
+      for (const c of inteiros) saida[c] = parseInt(saida[c], 10) || 0;
+      for (const c of decimais) saida[c] = Math.round((parseFloat(saida[c]) || 0) * 100) / 100;
+      return saida;
+    });
+
+    res.json({
+      ...totais,
+      clientes,
+      taxa_aprovacao,
+      escala,
+      serie: emNumero(serie, ['qtd'], ['valor', 'valor_aprovado']),
+      top_clientes: emNumero(top_clientes, ['qtd'], ['valor', 'valor_aprovado']),
+      recentes,
+      filtros_ativos: ativos,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro interno do servidor' });

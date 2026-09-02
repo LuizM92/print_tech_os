@@ -232,6 +232,36 @@ fora do servidor. Limite de 8 MB por arquivo.
 
 ---
 
+## Dashboard
+
+Os números respondem aos filtros — cartões, gráfico, ranking e lista falam sempre do
+mesmo recorte.
+
+**Filtros:** período (atalhos de hoje / 7 dias / 30 dias / mês / ano, ou datas livres),
+tipo (impressão ou venda), status, cliente, responsável, material, produto, faixa de
+valor e **descrição do item** — este último acha "todo orçamento que teve um suporte de
+motor", sem depender do número do documento. Os filtros se combinam, e a listagem de
+orçamentos aceita exatamente os mesmos parâmetros.
+
+**Indicadores:** orçamentos (com a divisão impressão/venda), aprovados, **taxa de
+aprovação**, **ticket médio** (geral e dos aprovados), volume aprovado e clientes. Com
+filtro aplicado, o cartão de clientes passa a contar quem de fato movimentou no
+recorte, em vez do total do cadastro.
+
+**Gráfico de evolução:** barras de valor por período — por dia quando a janela é curta
+(até ~2 meses), por mês quando é longa. A parte verde é o que foi aprovado, então a
+proporção entre as duas cores mostra quanto do orçado virou trabalho fechado. É SVG
+desenhado à mão: nenhuma biblioteca de gráficos, nada a mais no carregamento.
+
+**Top clientes:** ranking por valor aprovado no recorte. Clicar num cliente filtra o
+dashboard inteiro por ele.
+
+Entrada inválida em qualquer filtro é ignorada em silêncio — filtro é conveniência de
+tela e não deve derrubar a página. Todos os valores entram na consulta como parâmetro;
+nada do que o usuário digita vira texto de SQL.
+
+---
+
 ## Pré-requisitos
 
 - Node.js 20+ (o Docker usa Node 22; o 18 saiu de suporte e não roda o leitor de PDF)
@@ -351,10 +381,19 @@ cd backend
 npm test
 ```
 
-Cobre o núcleo de cálculo dos dois tipos: item único, múltiplos itens, serviços nos
-dois níveis, quantidade, arredondamento, entradas inválidas, e — no orçamento de venda
-— desconto percentual, desconto em reais, desconto maior que o item e desconto geral
-sobre o subtotal.
+O que os testes cobrem:
+
+- **Cálculo do orçamento de impressão** — item único, múltiplos itens, serviços nos dois
+  níveis, quantidade, arredondamento e entradas inválidas.
+- **Cálculo do orçamento de venda** — desconto percentual, desconto em reais, desconto
+  maior que o item e desconto geral incidindo sobre o subtotal.
+- **Validação de CNPJ** — dígitos verificadores, tamanho e sequências repetidas,
+  conferidos antes de disparar a consulta externa.
+- **Leitura da ficha em PDF** — rótulo na mesma linha e na linha de baixo, título de
+  seção que não pode roubar o valor seguinte, rótulo curto que não pode casar dentro de
+  outra palavra, dois campos por linha, estado por extenso e campos achados sem rótulo.
+- **Filtros do dashboard** — período, enums, ids, faixa de valor, busca em tabela filha,
+  granularidade do gráfico e recusa de entrada inválida.
 
 ---
 
@@ -457,8 +496,12 @@ GET    /api/configuracoes
 POST   /api/configuracoes                   (admin)
 
   # comuns aos dois tipos
-GET    /api/orcamentos/resumo               agregados do dashboard
-GET    /api/orcamentos                      ?tipo&pagina&status&busca
+GET    /api/orcamentos/resumo               indicadores, série do gráfico e ranking
+GET    /api/orcamentos                      listagem paginada (?pagina&porPagina)
+
+  # os dois aceitam os mesmos filtros, todos opcionais e combináveis:
+  #   de, ate (AAAA-MM-DD) · tipo · status · cliente_id · criado_por
+  #   material_id · produto_id · valor_min · valor_max · descricao_item · busca
 GET    /api/orcamentos/:id                  com itens/produtos e histórico
 PATCH  /api/orcamentos/:id/status           aprovar gera a OS ou o Pedido
 DELETE /api/orcamentos/:id                  (admin, só rascunho)
