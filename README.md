@@ -145,11 +145,65 @@ ele é salvo: renomear ou reajustar o produto depois não muda um pedido já fec
 
 ---
 
+## Cadastro de cliente
+
+Pessoa física pede só o essencial. Quando o tipo é **CNPJ**, o formulário abre os
+blocos fiscais, de contato, bancários e comerciais:
+
+| Bloco | Campos |
+|---|---|
+| Identificação | razão social, nome fantasia, CNPJ, markup |
+| Fiscal | inscrição estadual (ou marcador de **isento**), inscrição municipal, regime tributário, CNAE, situação cadastral |
+| Endereço | logradouro, número, complemento, bairro, cidade, UF, CEP |
+| Contato | nome, cargo, telefone, celular/WhatsApp, e-mail |
+| Bancário | banco, agência, conta, tipo de conta, tipo e chave PIX |
+| Comercial | condição de pagamento, limite de crédito, observações internas |
+
+Campos de PJ preenchidos numa ficha que depois vira pessoa física são descartados na
+gravação — não fica lixo no banco se você trocar o tipo.
+
+**Uma empresa precisa ter inscrição estadual ou estar marcada como isenta.** Deixar os
+dois em branco é recusado, porque vira problema na hora de faturar. Isso vale também ao
+editar clientes antigos: na primeira edição você vai precisar preencher ou marcar isento.
+
+### Importar dados do CNPJ
+
+Ao lado do campo CNPJ há o botão **Importar**: digite o número, clique, e o formulário
+vem preenchido com razão social, nome fantasia, endereço completo, telefone, e-mail,
+CNAE, situação cadastral e regime (quando Simples ou MEI).
+
+A consulta **só completa campos vazios** — o que você digitou à mão nunca é
+sobrescrito por um dado desatualizado da Receita. Os dígitos verificadores do CNPJ são
+conferidos localmente antes da chamada, para não gastar consulta com erro de digitação.
+
+**Sobre a inscrição estadual:** ela *não* vem na consulta gratuita. As APIs abertas
+expõem apenas o cadastro da **Receita Federal**; IE é dado estadual (SINTEGRA/SEFAZ) e
+só sai de serviço pago ou de integração direta com certificado digital A1/A3. A tela
+avisa isso quando você importa, e o campo fica para preencher à mão.
+
+O provedor é configurável — trocar não exige mexer no código:
+
+```env
+CNPJ_API_PROVIDER=brasilapi   # padrão: grátis, sem cadastro, sem IE
+CNPJ_API_TOKEN=               # só para o provedor pago
+```
+
+```env
+CNPJ_API_PROVIDER=cnpja       # pago: traz a IE consultando o SEFAZ
+CNPJ_API_TOKEN=seu_token_aqui
+```
+
+A chamada externa sai do **servidor**, não do navegador: evita CORS e mantém um
+eventual token fora do frontend.
+
+---
+
 ## Pré-requisitos
 
 - Node.js 18+
 - MySQL 5.7+ ou 8.0
 - npm
+- Acesso de saída à internet no servidor (só para a consulta de CNPJ)
 
 ---
 
@@ -226,6 +280,10 @@ nenhum valor. O número antigo é preservado em `numero_orcamento` (o prefixo `O
 A `004` acrescenta o módulo de venda. Ela não mexe em nenhum orçamento existente: todos
 recebem `tipo = impressao` e seguem exatamente como estavam.
 
+A `005` acrescenta os campos do cadastro completo de cliente. São todos opcionais no
+banco, então os clientes já cadastrados continuam válidos — mas a tela passa a exigir
+inscrição estadual (ou o marcador de isento) na próxima vez que você editar um CNPJ.
+
 Confira o resultado antes de seguir:
 
 ```sql
@@ -285,7 +343,12 @@ sobre o subtotal.
 ```
 usuarios            → id, nome, email, senha, perfil, ativo
 configuracoes       → chave, valor  (valor_hora_maquina)
-clientes            → id, nome, cpf_cnpj, tipo_documento, endereço..., markup
+clientes            → id, nome, nome_fantasia, cpf_cnpj, tipo_documento, endereço...,
+                      markup, inscricao_estadual, ie_isento, inscricao_municipal,
+                      regime_tributario, cnae, situacao_cadastral, contato_nome,
+                      contato_cargo, telefone, celular, email, banco, agencia, conta,
+                      tipo_conta, pix_tipo, pix_chave, condicao_pagamento,
+                      limite_credito, observacoes, ativo
 materiais           → id, nome, custo_por_grama, descricao, ativo
 servicos            → id, nome, valor_hora, descricao, ativo
 produtos            → id, codigo, nome, categoria, marca, cor, tipo_material,
@@ -333,6 +396,7 @@ POST   /api/usuarios                        (admin)
 PUT    /api/usuarios/:id                    (admin)
 DELETE /api/usuarios/:id                    (admin)
 
+GET    /api/clientes/consulta-cnpj/:cnpj     dados públicos para pré-preencher o cadastro
 GET    /api/clientes
 GET    /api/clientes/:id
 POST   /api/clientes

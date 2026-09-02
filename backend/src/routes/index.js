@@ -23,6 +23,8 @@ router.put('/usuarios/:id', autenticar, apenasAdmin, usuariosCtrl.atualizar);
 router.delete('/usuarios/:id', autenticar, apenasAdmin, usuariosCtrl.excluir);
 
 // Clientes
+// A consulta vem antes de /:id — senão 'consulta-cnpj' seria tratado como um id.
+router.get('/clientes/consulta-cnpj/:cnpj', autenticar, clientesCtrl.consultarPorCnpj);
 router.get('/clientes', autenticar, clientesCtrl.listar);
 router.get('/clientes/:id', autenticar, clientesCtrl.buscarPorId);
 router.post('/clientes', autenticar, clientesCtrl.criar);
