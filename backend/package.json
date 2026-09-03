@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "migrate": "node src/utils/migrate.js",
     "migrate:limpeza": "node src/utils/migrate.js --manuais",
+    "importar:skus": "node src/utils/importarSkus.js",
     "test": "node --test"
   },
   "dependencies": {

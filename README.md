@@ -145,6 +145,51 @@ ele é salvo: renomear ou reajustar o produto depois não muda um pedido já fec
 
 ---
 
+## Módulo de fabricação
+
+A tela **Fabricação → Produtos** é o cadastro do que a gente **fabrica** — diferente da
+tela **Produtos** de Cadastros, que é a mercadoria comprada para revender nos orçamentos
+de venda. Aqui vale o padrão de SKU descrito em [PADRAO-SKU.md](PADRAO-SKU.md):
+
+```
+SKU pai       CAT-MODELO                 VAS-PACMAN
+SKU variação  CAT-MODELO-MAT-VAR-TAM     VAS-PACMAN-PLA-AZL-G
+```
+
+| Nível | O que guarda |
+|---|---|
+| **Produto** (`fab_produtos`) | o SKU pai: categoria, modelo, nome, descrição |
+| **Variação** (`fab_variacoes`) | o SKU vendável: material, variação, tamanho, nome do anúncio, preço |
+| **Listagem** (`fab_listagens`) | em que loja está anunciado e com que id — o SKU é o mesmo em todas |
+
+O SKU **nunca é digitado**: ele é montado a partir dos blocos, na tela e de novo no
+servidor, e os blocos passam por normalização (sem acento, maiúsculo, só A–Z e 0–9;
+quantidade sempre com 2 dígitos). Isso mantém a quebra por posição funcionando.
+
+Duas regras do padrão viram trava no sistema:
+
+- **Categoria e modelo não mudam depois de gravados.** Trocá-los renomearia um SKU que
+  já está anunciado lá fora, então o formulário bloqueia os dois na edição.
+- **SKU não é reaproveitado.** Variação tirada do formulário fica *aposentada* (some do
+  anúncio, mas o código continua reservado), e descontinuar o produto desativa o pai e
+  as variações em vez de apagar.
+
+### Importar o catálogo de um CSV
+
+```bash
+cd backend
+npm run importar:skus                    # usa sku/consolidado-skus.csv
+npm run importar:skus -- outro.csv       # ou outro arquivo
+```
+
+Colunas esperadas: `loja`, `product_id`, `produto`, `variacao_shopee`, `sku_pai`,
+`sku_variacao` — as duas primeiras são opcionais. O script agrupa por SKU pai e é seguro
+repetir: produto que já existe é reaproveitado, SKU já cadastrado é pulado e linhas fora
+do padrão são listadas no fim, sem interromper a importação. Os preços entram zerados —
+o preço de cada variação é preenchido na tela.
+
+---
+
 ## Cadastro de cliente
 
 Pessoa física pede só o essencial. Quando o tipo é **CNPJ**, o formulário abre os
@@ -392,6 +437,9 @@ O que os testes cobrem:
 - **Leitura da ficha em PDF** — rótulo na mesma linha e na linha de baixo, título de
   seção que não pode roubar o valor seguinte, rótulo curto que não pode casar dentro de
   outra palavra, dois campos por linha, estado por extenso e campos achados sem rótulo.
+- **Padrão de SKU** — normalização dos blocos (acento, cedilha, espaço), quantidade com
+  2 dígitos, montagem do SKU pai e do SKU de variação, quebra de um SKU nos 5 blocos e
+  recusa de categoria, material ou modelo fora do padrão.
 - **Filtros do dashboard** — período, enums, ids, faixa de valor, busca em tabela filha,
   granularidade do gráfico e recusa de entrada inválida.
 
@@ -427,6 +475,11 @@ servicos            → id, nome, valor_hora, descricao, ativo
 produtos            → id, codigo, nome, categoria, marca, cor, tipo_material,
                       diametro_mm, peso_liquido_g, especificacao, unidade,
                       preco_venda, descricao, ativo
+
+fab_produtos        → id, sku_pai, categoria, modelo, nome, descricao, ativo
+fab_variacoes       → id, produto_id, sku, material, variacao, tamanho,
+                      nome_variacao, preco_venda, ativo
+fab_listagens       → id, produto_id, loja, product_id
 
 orcamentos          → id, tipo (impressao|produto), numero_orcamento,
                       numero_os / numero_pedido (NULL até aprovar), cliente_id,
@@ -494,6 +547,14 @@ DELETE /api/produtos/:id                    (admin)
 
 GET    /api/configuracoes
 POST   /api/configuracoes                   (admin)
+
+  # fabricação — catálogo próprio no padrão de SKU
+GET    /api/fabricacao/tabelas              categorias, materiais e cores do padrão
+GET    /api/fabricacao/produtos             ?categoria&busca&incluir_inativos
+GET    /api/fabricacao/produtos/:id         com variações e listagens
+POST   /api/fabricacao/produtos             (admin) cria com variações aninhadas
+PUT    /api/fabricacao/produtos/:id         (admin) nome, descrição, variações e lojas
+DELETE /api/fabricacao/produtos/:id         (admin) descontinua, não apaga
 
   # comuns aos dois tipos
 GET    /api/orcamentos/resumo               indicadores, série do gráfico e ranking

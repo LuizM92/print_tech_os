@@ -29,6 +29,7 @@ const servicosCtrl = require('../controllers/servicosController');
 const orcamentosCtrl = require('../controllers/orcamentosController');
 const orcamentosVendaCtrl = require('../controllers/orcamentosVendaController');
 const produtosCtrl = require('../controllers/produtosController');
+const fabricacaoCtrl = require('../controllers/fabricacaoController');
 const configCtrl = require('../controllers/configuracoesController');
 
 // Auth
@@ -73,6 +74,15 @@ router.get('/produtos', autenticar, produtosCtrl.listar);
 router.post('/produtos', autenticar, apenasAdmin, produtosCtrl.criar);
 router.put('/produtos/:id', autenticar, apenasAdmin, produtosCtrl.atualizar);
 router.delete('/produtos/:id', autenticar, apenasAdmin, produtosCtrl.excluir);
+
+// Fabricação — catálogo de produtos próprios, no padrão de SKU (PADRAO-SKU.md)
+// /tabelas vem antes de /:id — senão o Express trata 'tabelas' como um id.
+router.get('/fabricacao/tabelas', autenticar, fabricacaoCtrl.tabelas);
+router.get('/fabricacao/produtos', autenticar, fabricacaoCtrl.listar);
+router.get('/fabricacao/produtos/:id', autenticar, fabricacaoCtrl.buscarPorId);
+router.post('/fabricacao/produtos', autenticar, apenasAdmin, fabricacaoCtrl.criar);
+router.put('/fabricacao/produtos/:id', autenticar, apenasAdmin, fabricacaoCtrl.atualizar);
+router.delete('/fabricacao/produtos/:id', autenticar, apenasAdmin, fabricacaoCtrl.excluir);
 
 // Orçamentos — compartilhado pelos dois tipos (impressão e venda)
 // /resumo vem antes de /:id — senão o Express trata 'resumo' como um id.
