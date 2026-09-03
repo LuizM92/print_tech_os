@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { fmtMoeda, fmtData, fmtHoras, ETAPAS_PRODUCAO, rotuloEtapa } from '../utils/format';
+import { PERIODOS, intervaloDoPeriodo } from '../utils/periodo';
 
 const HOJE = () => new Date().toISOString().slice(0, 10);
 
@@ -22,20 +23,27 @@ export default function Producao() {
   const navigate = useNavigate();
   const [colunas, setColunas] = useState([]);
   const [busca, setBusca] = useState('');
+  const [filtro, setFiltro] = useState({ periodo: 'tudo', de: '', ate: '' });
   const [carregando, setCarregando] = useState(true);
   const [arrastando, setArrastando] = useState(null);
   const [sobre, setSobre] = useState(null);
 
   const carregar = useCallback(async () => {
     try {
-      const { data } = await api.get('/producao', { params: { busca: busca || undefined } });
+      const { data } = await api.get('/producao', {
+        params: {
+          busca: busca || undefined,
+          de: filtro.de || undefined,
+          ate: filtro.ate || undefined,
+        },
+      });
       setColunas(data.colunas);
     } catch {
       toast.error('Erro ao carregar a fila de produção');
     } finally {
       setCarregando(false);
     }
-  }, [busca]);
+  }, [busca, filtro.de, filtro.ate]);
 
   useEffect(() => {
     const timer = setTimeout(carregar, busca ? 350 : 0);
@@ -78,6 +86,11 @@ export default function Producao() {
     }
   };
 
+  const escolherPeriodo = (valor) =>
+    setFiltro((f) => ({ ...f, periodo: valor, ...intervaloDoPeriodo(valor) }));
+
+  const campoData = (nome) => (e) => setFiltro((f) => ({ ...f, [nome]: e.target.value }));
+
   const largar = (etapa) => (e) => {
     e.preventDefault();
     setSobre(null);
@@ -97,19 +110,62 @@ export default function Producao() {
       <div className="page-content">
         <div className="card" style={{ marginBottom: 16, padding: 16 }}>
           <div className="toolbar" style={{ marginBottom: 0 }}>
-            <div className="search-box">
-              <svg viewBox="0 0 24 24" fill="none">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke="currentColor" />
+            <div className="flex gap-3 items-center" style={{ flex: 1, flexWrap: 'wrap' }}>
+              <div className="search-box">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke="currentColor" />
+                </svg>
+                <input
+                  placeholder="Buscar por cliente ou número da OS..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                />
+              </div>
+
+              {/* O período olha a data de aprovação — é quando a OS entrou na fila. */}
+              <select
+                value={filtro.periodo}
+                onChange={(e) => escolherPeriodo(e.target.value)}
+                style={{ width: 'auto', flex: 'none' }}
+                title="Período de aprovação da OS"
+              >
+                {PERIODOS.map((p) => <option key={p.valor} value={p.valor}>{p.rotulo}</option>)}
+              </select>
+
+              {filtro.periodo === 'personalizado' && (
+                <>
+                  <input
+                    type="date"
+                    value={filtro.de}
+                    onChange={campoData('de')}
+                    max={filtro.ate || undefined}
+                    style={{ width: 'auto', flex: 'none' }}
+                    title="Aprovada a partir de"
+                  />
+                  <input
+                    type="date"
+                    value={filtro.ate}
+                    onChange={campoData('ate')}
+                    min={filtro.de || undefined}
+                    style={{ width: 'auto', flex: 'none' }}
+                    title="Aprovada até"
+                  />
+                </>
+              )}
+            </div>
+
+            <button className="btn btn-primary" onClick={() => navigate('/orcamentos/novo')}>
+              <svg viewBox="0 0 24 24" fill="none" style={{ width: 16, height: 16 }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" stroke="currentColor" />
               </svg>
-              <input
-                placeholder="Buscar por cliente ou número da OS..."
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-              />
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              {totalOrdens} OS na fila · entregues somem do quadro depois de 15 dias
-            </div>
+              Novo Orçamento
+            </button>
+          </div>
+
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>
+            {totalOrdens} OS no quadro
+            {filtro.de || filtro.ate ? ' no período aprovado' : ''}
+            {' '}· entregues somem do quadro depois de 15 dias
           </div>
         </div>
 

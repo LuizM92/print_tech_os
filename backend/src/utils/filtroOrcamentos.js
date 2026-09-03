@@ -153,4 +153,6 @@ const FORMATO_PERIODO = { dia: '%Y-%m-%d', mes: '%Y-%m' };
 
 module.exports = {
   construirFiltro, granularidade, FORMATO_PERIODO, STATUS_VALIDOS, TIPOS_ORCAMENTO,
+  // O quadro de produção monta o filtro dele, mas "o que é uma data válida" é aqui.
+  apenasData: data,
 };

@@ -173,6 +173,11 @@ Na fila  →  Imprimindo  →  Acabamento  →  Pronta  →  Entregue
 - Mover é arrastar o cartão ou usar as setas `‹ ›` — as setas andam uma etapa por vez.
 - A coluna **Entregue** só mostra o que saiu nos últimos 15 dias, senão ela cresceria
   para sempre. O resto continua no histórico e na listagem de orçamentos.
+- O **filtro de período** olha a data de **aprovação** — é quando a OS entrou na fila.
+  Filtrar pela criação do orçamento traria OS aprovadas hoje que foram orçadas meses
+  atrás. As opções são as mesmas do dashboard, incluindo escolher as datas na mão.
+- O botão **Novo Orçamento** abre o editor de impressão sem sair da tela: quem está
+  olhando a fila costuma ser quem recebe o próximo pedido.
 
 A mesma etapa aparece (e pode ser mudada) na tela de detalhe da OS, no card de status.
 
@@ -595,7 +600,8 @@ DELETE /api/fabricacao/produtos/:id         (admin) descontinua, não apaga
 
   # fila de produção — só OS aprovadas
 GET    /api/producao/etapas                 as etapas na ordem do quadro
-GET    /api/producao                        quadro agrupado por etapa (?busca&dias_entregue)
+GET    /api/producao                        quadro agrupado por etapa
+                                            (?busca&de&ate&dias_entregue — período pela aprovação)
 PATCH  /api/producao/:id                    move de etapa e/ou ajusta a previsão
 
   # comuns aos dois tipos

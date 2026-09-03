@@ -5,41 +5,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { fmtMoeda, fmtData, badgeClass, rotuloStatus } from '../utils/format';
 import GraficoBarras from '../components/shared/GraficoBarras';
-
-/** Datas em AAAA-MM-DD, no fuso local — `toISOString` devolveria em UTC e erraria o dia. */
-const iso = (d) => {
-  const ano = d.getFullYear();
-  const mes = String(d.getMonth() + 1).padStart(2, '0');
-  const dia = String(d.getDate()).padStart(2, '0');
-  return `${ano}-${mes}-${dia}`;
-};
-
-const hoje = () => new Date();
-const menosDias = (n) => { const d = hoje(); d.setDate(d.getDate() - n); return d; };
-
-const PERIODOS = [
-  { valor: 'tudo', rotulo: 'Todo o período', intervalo: () => ({ de: '', ate: '' }) },
-  { valor: 'hoje', rotulo: 'Hoje', intervalo: () => ({ de: iso(hoje()), ate: iso(hoje()) }) },
-  { valor: '7d', rotulo: 'Últimos 7 dias', intervalo: () => ({ de: iso(menosDias(6)), ate: iso(hoje()) }) },
-  { valor: '30d', rotulo: 'Últimos 30 dias', intervalo: () => ({ de: iso(menosDias(29)), ate: iso(hoje()) }) },
-  {
-    valor: 'mes',
-    rotulo: 'Mês atual',
-    intervalo: () => {
-      const d = hoje();
-      return { de: iso(new Date(d.getFullYear(), d.getMonth(), 1)), ate: iso(d) };
-    },
-  },
-  {
-    valor: 'ano',
-    rotulo: 'Ano atual',
-    intervalo: () => {
-      const d = hoje();
-      return { de: iso(new Date(d.getFullYear(), 0, 1)), ate: iso(d) };
-    },
-  },
-  { valor: 'personalizado', rotulo: 'Escolher datas...', intervalo: null },
-];
+import { PERIODOS, intervaloDoPeriodo } from '../utils/periodo';
 
 const filtroVazio = {
   periodo: 'tudo', de: '', ate: '',
@@ -108,14 +74,8 @@ export default function Dashboard() {
     return () => clearTimeout(timer);
   }, [carregar, filtro.descricao_item]);
 
-  const escolherPeriodo = (valor) => {
-    const escolhido = PERIODOS.find((p) => p.valor === valor);
-    setFiltro((f) => ({
-      ...f,
-      periodo: valor,
-      ...(escolhido?.intervalo ? escolhido.intervalo() : {}),
-    }));
-  };
+  const escolherPeriodo = (valor) =>
+    setFiltro((f) => ({ ...f, periodo: valor, ...intervaloDoPeriodo(valor) }));
 
   const campo = (nome) => (e) => setFiltro((f) => ({ ...f, [nome]: e.target.value }));
 

@@ -1,6 +1,7 @@
 const db = require('../utils/db');
 const { registrarHistorico } = require('../utils/documentos');
 const { ETAPAS, ehEtapaValida, detalheMovimento, rotuloEtapa } = require('../utils/producao');
+const { apenasData } = require('../utils/filtroOrcamentos');
 
 // A coluna "Entregue" só mostra o que saiu há pouco tempo — senão ela cresce para
 // sempre e engole o quadro. O resto continua no histórico e na listagem de orçamentos.
@@ -21,6 +22,19 @@ const quadro = async (req, res) => {
     // Entregue some depois de N dias; as outras etapas mostram tudo.
     where.push("(o.etapa_producao <> 'entregue' OR o.etapa_alterada_em >= DATE_SUB(NOW(), INTERVAL ? DAY))");
     params.push(dias);
+
+    // O período incide sobre a aprovação — é quando a OS entrou na fila. Filtrar pela
+    // criação do orçamento traria OS aprovadas hoje que foram orçadas meses atrás.
+    const de = apenasData(req.query.de);
+    const ate = apenasData(req.query.ate);
+    if (de) {
+      where.push('o.aprovado_em >= ?');
+      params.push(`${de} 00:00:00`);
+    }
+    if (ate) {
+      where.push('o.aprovado_em <= ?');
+      params.push(`${ate} 23:59:59`);
+    }
 
     if (req.query.busca) {
       where.push('(c.nome LIKE ? OR o.numero_os LIKE ? OR o.numero_orcamento LIKE ?)');
