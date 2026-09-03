@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import {
   fmtMoeda, fmtNum, fmtQtd, fmtData, fmtDataHora, badgeClass, rotuloStatus,
+  ETAPAS_PRODUCAO, rotuloEtapa,
 } from '../utils/format';
 import { ConfirmModal } from '../components/shared/Modal';
 
@@ -76,6 +77,16 @@ export default function DetalheOrcamento() {
       carregar();
     } catch (err) {
       toast.error(err.response?.data?.erro || 'Erro ao alterar status');
+    }
+  };
+
+  const alterarEtapa = async (etapa) => {
+    try {
+      const { data } = await api.patch(`/producao/${id}`, { etapa });
+      toast.success(data.mensagem);
+      carregar();
+    } catch (err) {
+      toast.error(err.response?.data?.erro || 'Erro ao mover a OS na fila');
     }
   };
 
@@ -357,6 +368,33 @@ export default function DetalheOrcamento() {
                 </button>
               ))}
             </div>
+
+            {/* A etapa é o andamento interno da OS: o status diz que o cliente
+                aprovou, a etapa diz onde a peça está na oficina. */}
+            {ehOS && !ehVenda && (
+              <>
+                <h3 style={tituloCard}>Etapa de produção</h3>
+                <div className="flex gap-3" style={{ flexWrap: 'wrap', marginBottom: 8 }}>
+                  {ETAPAS_PRODUCAO.map((e) => (
+                    <button
+                      key={e.codigo}
+                      className={`btn ${orc.etapa_producao === e.codigo ? 'btn-primary' : 'btn-ghost'} btn-sm`}
+                      onClick={() => alterarEtapa(e.codigo)}
+                      disabled={orc.etapa_producao === e.codigo}
+                      title={e.descricao}
+                    >
+                      {e.rotulo}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
+                  Está em <strong>{rotuloEtapa(orc.etapa_producao)}</strong>
+                  {orc.etapa_alterada_em && <> desde {fmtData(orc.etapa_alterada_em)}</>}
+                  {orc.previsao_entrega && <> · previsão de entrega {fmtData(orc.previsao_entrega)}</>}
+                  {' '}· acompanhe a fila inteira em Produção.
+                </div>
+              </>
+            )}
 
             <h3 style={tituloCard}>Outras ações</h3>
             <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>

@@ -145,6 +145,39 @@ ele é salvo: renomear ou reajustar o produto depois não muda um pedido já fec
 
 ---
 
+## Fila de produção
+
+A tela **Produção** é o quadro kanban das OS aprovadas. Ele existe porque `status` e
+andamento são coisas diferentes: o status conta a história comercial (o cliente
+aprovou), a etapa conta a história da oficina — e é a etapa que responde *"já posso
+avisar que ficou pronta?"*.
+
+```
+Na fila  →  Imprimindo  →  Acabamento  →  Pronta  →  Entregue
+```
+
+| Etapa | O que significa |
+|---|---|
+| `fila` | aprovada, esperando a máquina |
+| `producao` | peça na impressora |
+| `acabamento` | pós-processamento, pintura, montagem |
+| `pronto` | terminada — **é aqui que se avisa o cliente** |
+| `entregue` | retirada pelo cliente ou enviada |
+
+- Só **OS** entram na fila: orçamento de venda não passa pela impressora.
+- A OS entra em `fila` quando é aprovada pela primeira vez. Reprovar e aprovar de novo
+  **não** devolve para a fila uma peça que já estava pronta.
+- Cada movimento fica no **histórico do orçamento**, com quem moveu e de onde para onde.
+- O cartão traz o volume de trabalho (peças, horas de impressão, gramas), o valor e a
+  **previsão de entrega**, editável ali mesmo. Previsão vencida marca o cartão de vermelho.
+- Mover é arrastar o cartão ou usar as setas `‹ ›` — as setas andam uma etapa por vez.
+- A coluna **Entregue** só mostra o que saiu nos últimos 15 dias, senão ela cresceria
+  para sempre. O resto continua no histórico e na listagem de orçamentos.
+
+A mesma etapa aparece (e pode ser mudada) na tela de detalhe da OS, no card de status.
+
+---
+
 ## Módulo de fabricação
 
 A tela **Fabricação → Produtos** é o cadastro do que a gente **fabrica** — diferente da
@@ -437,6 +470,8 @@ O que os testes cobrem:
 - **Leitura da ficha em PDF** — rótulo na mesma linha e na linha de baixo, título de
   seção que não pode roubar o valor seguinte, rótulo curto que não pode casar dentro de
   outra palavra, dois campos por linha, estado por extenso e campos achados sem rótulo.
+- **Etapas de produção** — etapa inicial, recusa de etapa inexistente, `pronta` e
+  `entregue` como etapas distintas e o texto do movimento gravado no histórico.
 - **Padrão de SKU** — normalização dos blocos (acento, cedilha, espaço), quantidade com
   2 dígitos, montagem do SKU pai e do SKU de variação, quebra de um SKU nos 5 blocos e
   recusa de categoria, material ou modelo fora do padrão.
@@ -482,6 +517,8 @@ fab_variacoes       → id, produto_id, sku, material, variacao, tamanho,
 fab_listagens       → id, produto_id, loja, product_id
 
 orcamentos          → id, tipo (impressao|produto), numero_orcamento,
+                      etapa_producao (fila|producao|acabamento|pronto|entregue),
+                      etapa_alterada_em, previsao_entrega,
                       numero_os / numero_pedido (NULL até aprovar), cliente_id,
                       observacao, valor_hora_maquina, total_itens, total_servicos_itens,
                       total_servicos_gerais, total_produtos, desconto_tipo, desconto,
@@ -555,6 +592,11 @@ GET    /api/fabricacao/produtos/:id         com variações e listagens
 POST   /api/fabricacao/produtos             (admin) cria com variações aninhadas
 PUT    /api/fabricacao/produtos/:id         (admin) nome, descrição, variações e lojas
 DELETE /api/fabricacao/produtos/:id         (admin) descontinua, não apaga
+
+  # fila de produção — só OS aprovadas
+GET    /api/producao/etapas                 as etapas na ordem do quadro
+GET    /api/producao                        quadro agrupado por etapa (?busca&dias_entregue)
+PATCH  /api/producao/:id                    move de etapa e/ou ajusta a previsão
 
   # comuns aos dois tipos
 GET    /api/orcamentos/resumo               indicadores, série do gráfico e ranking

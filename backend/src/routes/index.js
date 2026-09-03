@@ -30,6 +30,7 @@ const orcamentosCtrl = require('../controllers/orcamentosController');
 const orcamentosVendaCtrl = require('../controllers/orcamentosVendaController');
 const produtosCtrl = require('../controllers/produtosController');
 const fabricacaoCtrl = require('../controllers/fabricacaoController');
+const producaoCtrl = require('../controllers/producaoController');
 const configCtrl = require('../controllers/configuracoesController');
 
 // Auth
@@ -83,6 +84,11 @@ router.get('/fabricacao/produtos/:id', autenticar, fabricacaoCtrl.buscarPorId);
 router.post('/fabricacao/produtos', autenticar, apenasAdmin, fabricacaoCtrl.criar);
 router.put('/fabricacao/produtos/:id', autenticar, apenasAdmin, fabricacaoCtrl.atualizar);
 router.delete('/fabricacao/produtos/:id', autenticar, apenasAdmin, fabricacaoCtrl.excluir);
+
+// Produção — fila das OS aprovadas (quadro kanban)
+router.get('/producao/etapas', autenticar, producaoCtrl.etapas);
+router.get('/producao', autenticar, producaoCtrl.quadro);
+router.patch('/producao/:id', autenticar, producaoCtrl.mover);
 
 // Orçamentos — compartilhado pelos dois tipos (impressão e venda)
 // /resumo vem antes de /:id — senão o Express trata 'resumo' como um id.

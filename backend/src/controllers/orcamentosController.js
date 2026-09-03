@@ -600,8 +600,13 @@ const alterarStatus = async (req, res) => {
     if (status === 'aprovado') {
       // Reprovar e aprovar de novo não renumera: o documento mantém o número original.
       if (!numeroAprovado) numeroAprovado = await proximoNumero(conn, rotulo.documentoAprovado);
+      // A OS entra na fila de produção ao ser aprovada pela primeira vez. Reaprovar não
+      // devolve para a fila uma peça que já estava pronta — daí o COALESCE no marco.
       await conn.query(
-        `UPDATE orcamentos SET status = ?, ${campoNumero} = ?, aprovado_em = NOW(), aprovado_por = ? WHERE id = ?`,
+        `UPDATE orcamentos
+            SET status = ?, ${campoNumero} = ?, aprovado_em = NOW(), aprovado_por = ?,
+                etapa_alterada_em = COALESCE(etapa_alterada_em, NOW())
+          WHERE id = ?`,
         [status, numeroAprovado, req.usuario.id, orcamento.id]
       );
     } else {

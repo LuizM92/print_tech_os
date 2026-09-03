@@ -15,6 +15,7 @@ import EditorOrcamentoVenda from './pages/EditorOrcamentoVenda';
 import Vendas from './pages/Vendas';
 import Produtos from './pages/Produtos';
 import FabricacaoProdutos from './pages/FabricacaoProdutos';
+import Producao from './pages/Producao';
 import DetalheOrcamento from './pages/DetalheOrcamento';
 import Configuracoes from './pages/Configuracoes';
 import './index.css';
@@ -57,6 +58,7 @@ function AppRoutes() {
       <Route path="/vendas/novo" element={<PrivateRoute><AppLayout><EditorOrcamentoVenda /></AppLayout></PrivateRoute>} />
       <Route path="/vendas/:id/editar" element={<PrivateRoute><AppLayout><EditorOrcamentoVenda /></AppLayout></PrivateRoute>} />
       <Route path="/produtos" element={<PrivateRoute><AppLayout><Produtos /></AppLayout></PrivateRoute>} />
+      <Route path="/producao" element={<PrivateRoute><AppLayout><Producao /></AppLayout></PrivateRoute>} />
       <Route path="/fabricacao/produtos" element={<PrivateRoute><AppLayout><FabricacaoProdutos /></AppLayout></PrivateRoute>} />
       <Route path="/usuarios" element={<PrivateRoute adminOnly><AppLayout><Usuarios /></AppLayout></PrivateRoute>} />
       <Route path="/configuracoes" element={<PrivateRoute><AppLayout><Configuracoes /></AppLayout></PrivateRoute>} />

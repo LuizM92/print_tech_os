@@ -61,3 +61,25 @@ export const ehConsumivel = (categoria) => ['filamento', 'resina'].includes(cate
 /** Descrição curta do produto para listas e selects: marca, cor e especificação. */
 export const fichaProduto = (p) =>
   [p.marca, p.cor, p.tipo_material, p.especificacao].filter(Boolean).join(' · ');
+
+// ─── Fila de produção ───────────────────────────────────────────────────────
+// Espelha backend/src/utils/producao.js — o quadro usa a ordem daqui.
+
+export const ETAPAS_PRODUCAO = [
+  { codigo: 'fila', rotulo: 'Na fila', descricao: 'Aprovada, esperando a máquina' },
+  { codigo: 'producao', rotulo: 'Imprimindo', descricao: 'Peça na impressora' },
+  { codigo: 'acabamento', rotulo: 'Acabamento', descricao: 'Pós-processamento, pintura, montagem' },
+  { codigo: 'pronto', rotulo: 'Pronta', descricao: 'Terminada — dá para avisar o cliente' },
+  { codigo: 'entregue', rotulo: 'Entregue', descricao: 'Retirada pelo cliente ou enviada' },
+];
+
+export const rotuloEtapa = (codigo) =>
+  ETAPAS_PRODUCAO.find((e) => e.codigo === codigo)?.rotulo || codigo;
+
+/** Horas com o minuto junto, como a oficina fala: 12h30 em vez de 12,5 h. */
+export const fmtHoras = (v) => {
+  const total = parseFloat(v || 0);
+  const horas = Math.floor(total);
+  const minutos = Math.round((total - horas) * 60);
+  return minutos === 0 ? `${horas}h` : `${horas}h${String(minutos).padStart(2, '0')}`;
+};
