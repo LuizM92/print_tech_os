@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { fmtMoeda, fmtNum } from '../utils/format';
 import { calcularOrcamento } from '../utils/calculo';
 import { ConfirmModal } from '../components/shared/Modal';
+import SeletorCliente from '../components/shared/SeletorCliente';
 
 let contadorChave = 0;
 const novaChave = () => `k${++contadorChave}`;
@@ -233,8 +234,6 @@ export default function EditorOrcamento() {
     }
   };
 
-  const clienteSelecionado = clientes.find((c) => c.id === parseInt(form.cliente_id, 10));
-
   if (carregando) {
     return <div className="loading-screen"><span className="spinner" /><span>Carregando...</span></div>;
   }
@@ -268,29 +267,11 @@ export default function EditorOrcamento() {
               {/* ── Cliente ─────────────────────────────────────────── */}
               <div className="card" style={{ marginBottom: 16 }}>
                 <h3 style={{ ...tituloSecao, marginBottom: 14 }}>Cliente</h3>
-                <div className="form-group">
-                  <label>Selecione o cliente</label>
-                  <select
-                    value={form.cliente_id}
-                    onChange={(e) => setForm((p) => ({ ...p, cliente_id: e.target.value }))}
-                    required
-                  >
-                    <option value="">Selecione...</option>
-                    {clientes.map((c) => (
-                      <option key={c.id} value={c.id}>{c.nome} — {c.cpf_cnpj}</option>
-                    ))}
-                  </select>
-                </div>
-                {clienteSelecionado && (
-                  <div style={{
-                    background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)',
-                    padding: '12px 14px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8,
-                  }}>
-                    <strong style={{ color: 'var(--text-primary)' }}>{clienteSelecionado.nome}</strong><br />
-                    {clienteSelecionado.rua}, {clienteSelecionado.numero} — {clienteSelecionado.bairro}<br />
-                    {clienteSelecionado.cidade}/{clienteSelecionado.estado} — CEP {clienteSelecionado.cep}
-                  </div>
-                )}
+                <SeletorCliente
+                  clientes={clientes}
+                  valor={form.cliente_id}
+                  onChange={(id) => setForm((p) => ({ ...p, cliente_id: id }))}
+                />
               </div>
 
               {/* ── Itens ───────────────────────────────────────────── */}
