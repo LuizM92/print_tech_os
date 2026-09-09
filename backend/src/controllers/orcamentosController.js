@@ -958,7 +958,7 @@ const gerarPDF = async (req, res) => {
     }
 
     condicaoPagamento(
-      'Pagamento em PIX — 5% de desconto em qualquer valor',
+      'Pagamento no PIX - 5% de desconto',
       `Desconto de ${fmtMoeda(descontoPix)} sobre o total geral`,
       totalPix,
       CORES.sucesso
