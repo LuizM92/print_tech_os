@@ -7,6 +7,8 @@ import { PERIODOS, intervaloDoPeriodo } from '../utils/periodo';
 
 const HOJE = () => new Date().toISOString().slice(0, 10);
 
+const PERIODO_PADRAO = '30d';
+
 /** Data que o <input type="date"> entende, a partir do que vem do banco. */
 const paraInput = (valor) => (valor ? String(valor).slice(0, 10) : '');
 
@@ -23,7 +25,11 @@ export default function Producao() {
   const navigate = useNavigate();
   const [colunas, setColunas] = useState([]);
   const [busca, setBusca] = useState('');
-  const [filtro, setFiltro] = useState({ periodo: 'tudo', de: '', ate: '' });
+  // A oficina olha o que entrou nas últimas semanas; o que foi aprovado há meses
+  // e continua aberto aparece trocando o período no filtro.
+  const [filtro, setFiltro] = useState(
+    { periodo: PERIODO_PADRAO, ...intervaloDoPeriodo(PERIODO_PADRAO) }
+  );
   const [carregando, setCarregando] = useState(true);
   const [arrastando, setArrastando] = useState(null);
   const [sobre, setSobre] = useState(null);

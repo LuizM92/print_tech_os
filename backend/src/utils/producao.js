@@ -11,6 +11,7 @@
 
 const ETAPAS = [
   { codigo: 'fila', rotulo: 'Na fila', descricao: 'Aprovada, esperando a máquina' },
+  { codigo: 'desenho', rotulo: 'Desenho', descricao: 'Modelagem da peça antes da impressão' },
   { codigo: 'producao', rotulo: 'Imprimindo', descricao: 'Peça na impressora' },
   { codigo: 'acabamento', rotulo: 'Acabamento', descricao: 'Pós-processamento, pintura, montagem' },
   { codigo: 'pronto', rotulo: 'Pronta', descricao: 'Terminada — dá para avisar o cliente' },

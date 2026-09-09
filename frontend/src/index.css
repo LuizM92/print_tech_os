@@ -499,7 +499,9 @@ textarea { resize: vertical; min-height: 90px; }
 /* Quadro de produção (kanban) */
 .kanban {
   display: grid;
-  grid-template-columns: repeat(5, minmax(210px, 1fr));
+  /* Uma coluna por etapa, sem número fixo: a lista de etapas manda. */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(210px, 1fr);
   gap: 12px;
   align-items: start;
   overflow-x: auto;
@@ -595,7 +597,7 @@ textarea { resize: vertical; min-height: 90px; }
 .kanban-tempo { font-size: 10.5px; color: var(--text-muted); margin-top: 6px; }
 
 @media (max-width: 1100px) {
-  .kanban { grid-template-columns: repeat(5, 210px); }
+  .kanban { grid-auto-columns: 210px; }
 }
 
 /* Login page */
