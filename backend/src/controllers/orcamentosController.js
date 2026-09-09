@@ -925,6 +925,47 @@ const gerarPDF = async (req, res) => {
 
     y += alturaTotais + 10;
 
+    // ── Condições de pagamento ──────────────────────────────────────
+    // O parcelamento só é oferecido acima do mínimo; o desconto do PIX vale sempre.
+    const PARCELAS = 3;
+    const MINIMO_PARCELAMENTO = 300;
+    const DESCONTO_PIX = 0.05;
+
+    const parcela = orc.total_geral / PARCELAS;
+    const descontoPix = orc.total_geral * DESCONTO_PIX;
+    const totalPix = orc.total_geral - descontoPix;
+
+    secao('CONDIÇÕES DE PAGAMENTO');
+
+    const condicaoPagamento = (titulo_, detalhe, valor, cor) => {
+      espaco(26);
+      doc.font('Helvetica').fontSize(9.5).fillColor(CORES.texto)
+        .text(titulo_, ESQ, y, { width: 340 });
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(cor || CORES.texto)
+        .text(fmtMoeda(valor), caixaX, y - 1, { width: caixaLargura, align: 'right' });
+      y += 12;
+      doc.font('Helvetica').fontSize(7.5).fillColor('#999999')
+        .text(detalhe, ESQ, y, { width: 340 });
+      y += 14;
+    };
+
+    if (orc.total_geral > MINIMO_PARCELAMENTO) {
+      condicaoPagamento(
+        `Parcelamento em ${PARCELAS}x sem juros de ${fmtMoeda(parcela)}`,
+        `Válido para valores acima de ${fmtMoeda(MINIMO_PARCELAMENTO)}`,
+        orc.total_geral
+      );
+    }
+
+    condicaoPagamento(
+      'Pagamento em PIX — 5% de desconto em qualquer valor',
+      `Desconto de ${fmtMoeda(descontoPix)} sobre o total geral`,
+      totalPix,
+      CORES.sucesso
+    );
+
+    y += 6;
+
     if (!ehOS) {
       espaco(30);
       doc.font('Helvetica-Oblique').fontSize(8.5).fillColor(CORES.suave).text(
