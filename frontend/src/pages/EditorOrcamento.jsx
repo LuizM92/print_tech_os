@@ -49,6 +49,7 @@ export default function EditorOrcamento() {
   const [materiais, setMateriais] = useState([]);
   const [servicos, setServicos] = useState([]);
   const [valorHoraMaquina, setValorHoraMaquina] = useState(7.0);
+  const [horaMaquinaGlobal, setHoraMaquinaGlobal] = useState(7.0);
 
   const [form, setForm] = useState({ cliente_id: '', observacao: '' });
   const [itens, setItens] = useState([itemVazio()]);
@@ -75,7 +76,10 @@ export default function EditorOrcamento() {
         setServicos(s.data);
 
         const horaMaquina = cfg.data.find((x) => x.chave === 'valor_hora_maquina');
-        if (horaMaquina) setValorHoraMaquina(parseFloat(horaMaquina.valor));
+        if (horaMaquina) {
+          setHoraMaquinaGlobal(parseFloat(horaMaquina.valor));
+          setValorHoraMaquina(parseFloat(horaMaquina.valor));
+        }
 
         if (editando) {
           const { data } = await api.get(`/orcamentos/${id}`);
@@ -127,6 +131,20 @@ export default function EditorOrcamento() {
     };
     carregar();
   }, [id, editando, navigate]);
+
+  // O cliente pode ter hora-máquina própria; sem ela, vale a global. É a mesma
+  // regra do servidor, repetida aqui só para o preview bater com o que será gravado.
+  const clienteSelecionado = clientes.find((c) => String(c.id) === String(form.cliente_id));
+  const horaMaquinaDoCliente = parseFloat(clienteSelecionado?.valor_hora_maquina) > 0
+    ? parseFloat(clienteSelecionado.valor_hora_maquina)
+    : null;
+
+  useEffect(() => {
+    // Em edição a hora-máquina é a que o orçamento congelou — trocar de cliente
+    // não repreça nada, do mesmo jeito que trocar de material não repreça.
+    if (editando) return;
+    setValorHoraMaquina(horaMaquinaDoCliente ?? horaMaquinaGlobal);
+  }, [editando, horaMaquinaDoCliente, horaMaquinaGlobal]);
 
   // ── Cálculo ao vivo (o valor gravado é sempre o que o servidor calcula) ──
   const calculo = useMemo(
@@ -392,7 +410,11 @@ export default function EditorOrcamento() {
                   borderRadius: 'var(--radius-sm)', fontSize: 11, color: 'var(--warning)',
                 }}>
                   Hora-Máquina: {fmtMoeda(valorHoraMaquina)}/h
-                  {editando && <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>(do orçamento)</span>}
+                  {editando
+                    ? <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>(do orçamento)</span>
+                    : horaMaquinaDoCliente !== null && (
+                      <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>(deste cliente)</span>
+                    )}
                 </div>
 
                 <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>

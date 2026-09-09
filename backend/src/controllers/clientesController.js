@@ -19,7 +19,7 @@ const CAMPOS = [
   // bancário
   'banco', 'agencia', 'conta', 'tipo_conta', 'pix_tipo', 'pix_chave',
   // comercial
-  'condicao_pagamento', 'limite_credito', 'observacoes',
+  'condicao_pagamento', 'limite_credito', 'observacoes', 'valor_hora_maquina',
 ];
 
 const texto = (v) => {
@@ -79,6 +79,8 @@ const normalizar = (corpo) => {
 
     condicao_pagamento: texto(corpo.condicao_pagamento),
     limite_credito: numeroOu(corpo.limite_credito),
+    // Nulo não é zero: quer dizer que este cliente segue a hora-máquina das configurações.
+    valor_hora_maquina: numeroOu(corpo.valor_hora_maquina),
     observacoes: texto(corpo.observacoes),
   };
 };
@@ -96,6 +98,9 @@ const validar = (c) => {
   }
   if (c.limite_credito !== null && c.limite_credito < 0) return 'Limite de crédito não pode ser negativo';
   if (c.markup < 0) return 'Markup não pode ser negativo';
+  if (c.valor_hora_maquina !== null && !(c.valor_hora_maquina > 0)) {
+    return 'Hora-máquina do cliente deve ser maior que zero — deixe em branco para usar a global';
+  }
   return null;
 };
 

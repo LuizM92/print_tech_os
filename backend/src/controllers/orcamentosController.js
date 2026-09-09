@@ -359,6 +359,16 @@ const buscarPorId = async (req, res) => {
 };
 
 // ─── Escrita ────────────────────────────────────────────────────────────────
+/**
+ * A hora-máquina do cliente manda; sem ela vale a global das configurações.
+ * Zero e nulo caem os dois na global — cliente sem preço próprio não imprime de graça.
+ */
+const resolverHoraMaquina = async (valorDoCliente) => {
+  const doCliente = parseFloat(valorDoCliente);
+  if (doCliente > 0) return doCliente;
+  return parseFloat(await buscarPorChave('valor_hora_maquina')) || 7.0;
+};
+
 const criar = async (req, res) => {
   const { cliente_id, observacao, itens, servicos_gerais = [] } = req.body;
 
@@ -369,13 +379,15 @@ const criar = async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    const [cliente] = await conn.query('SELECT id FROM clientes WHERE id = ?', [cliente_id]);
+    const [cliente] = await conn.query(
+      'SELECT id, valor_hora_maquina FROM clientes WHERE id = ?', [cliente_id]
+    );
     if (cliente.length === 0) {
       await conn.rollback();
       return res.status(404).json({ erro: 'Cliente não encontrado' });
     }
 
-    const valorHoraMaquina = parseFloat(await buscarPorChave('valor_hora_maquina')) || 7.0;
+    const valorHoraMaquina = await resolverHoraMaquina(cliente[0].valor_hora_maquina);
     const numeroOrcamento = await proximoNumero(conn, 'orcamento');
 
     const [result] = await conn.query(
@@ -501,7 +513,7 @@ const reprecificar = async (req, res) => {
     await conn.beginTransaction();
 
     const [[orcamento]] = await conn.query(
-      'SELECT id, total_geral FROM orcamentos WHERE id = ? FOR UPDATE',
+      'SELECT id, cliente_id, total_geral FROM orcamentos WHERE id = ? FOR UPDATE',
       [req.params.id]
     );
     if (!orcamento) {
@@ -509,7 +521,10 @@ const reprecificar = async (req, res) => {
       return res.status(404).json({ erro: 'Orçamento não encontrado' });
     }
 
-    const valorHoraMaquina = parseFloat(await buscarPorChave('valor_hora_maquina')) || 7.0;
+    const [[cliente]] = await conn.query(
+      'SELECT valor_hora_maquina FROM clientes WHERE id = ?', [orcamento.cliente_id]
+    );
+    const valorHoraMaquina = await resolverHoraMaquina(cliente?.valor_hora_maquina);
     await conn.query('UPDATE orcamentos SET valor_hora_maquina = ? WHERE id = ?', [valorHoraMaquina, orcamento.id]);
 
     await conn.query(`

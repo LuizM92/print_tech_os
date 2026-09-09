@@ -60,7 +60,7 @@ Por item:
 
 ```
 custo_material  = peso_gramas      × custo_por_grama       (do material)
-custo_impressao = horas_impressao  × valor_hora_maquina    (das configurações)
+custo_impressao = horas_impressao  × valor_hora_maquina    (do cliente, ou das configurações)
 valor_por_peca  = custo_material + custo_impressao
 total_pecas     = valor_por_peca × quantidade
 total_servicos  = Σ (valor_hora × horas)                   (serviços do item)

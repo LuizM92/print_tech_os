@@ -37,7 +37,7 @@ const vazio = {
   regime_tributario: '', cnae: '', situacao_cadastral: '',
   contato_nome: '', contato_cargo: '', telefone: '', celular: '', email: '',
   banco: '', agencia: '', conta: '', tipo_conta: '', pix_tipo: '', pix_chave: '',
-  condicao_pagamento: '', limite_credito: '', observacoes: '',
+  condicao_pagamento: '', limite_credito: '', observacoes: '', valor_hora_maquina: '',
 };
 
 /**
@@ -102,6 +102,8 @@ export default function Clientes() {
     preenchido.ie_isento = Boolean(c.ie_isento);
     preenchido.markup = c.markup != null ? String(parseFloat(c.markup)) : '';
     preenchido.limite_credito = c.limite_credito != null ? String(parseFloat(c.limite_credito)) : '';
+    preenchido.valor_hora_maquina = c.valor_hora_maquina != null
+      ? String(parseFloat(c.valor_hora_maquina)) : '';
     setForm(preenchido);
     setEditId(c.id);
     setResumoFicha(null);
@@ -614,6 +616,27 @@ export default function Clientes() {
                   {fmtMoeda(form.limite_credito)}
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="form-row">
+            {/* Em branco o cliente segue a hora-máquina das configurações — e acompanha
+                quando ela mudar. Preencher é o combinado à parte com este cliente. */}
+            <div className="form-group">
+              <label>Hora-máquina (R$/h)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.valor_hora_maquina}
+                onChange={campo('valor_hora_maquina')}
+                placeholder="Usa o valor das configurações"
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                {parseFloat(form.valor_hora_maquina) > 0
+                  ? `${fmtMoeda(form.valor_hora_maquina)}/h só para este cliente`
+                  : 'Em branco, vale a hora-máquina global das configurações'}
+              </div>
             </div>
           </div>
 
