@@ -691,6 +691,18 @@ textarea { resize: vertical; min-height: 90px; }
 .text-danger { color: var(--danger); }
 .text-warning { color: var(--warning); }
 .text-accent { color: var(--accent); }
+
+/* Botão que se comporta como link — usado quando a ação é abrir/baixar algo. */
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.link-button:hover { color: var(--text-primary); }
 .text-muted { color: var(--text-muted); }
 .text-right { text-align: right; }
 .font-mono { font-family: var(--font-mono); }

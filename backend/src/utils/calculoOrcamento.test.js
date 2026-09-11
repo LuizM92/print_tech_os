@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { round2, calcularItem, calcularOrcamento } = require('./calculoOrcamento');
+const {
+  round2, calcularItem, calcularOrcamento, calcularOrcamentoVenda,
+} = require('./calculoOrcamento');
 
 const item = (over = {}) => ({
   peso_gramas: 200, custo_por_grama: 0.15, horas_impressao: 2, quantidade: 1, servicos: [], ...over,
@@ -75,4 +77,61 @@ test('total das peças usa o valor unitário já arredondado (PDF fecha na confe
   const r = calcularItem(item({ peso_gramas: 70, custo_por_grama: 0.1508, horas_impressao: 0, quantidade: 3 }), 7);
   assert.strictEqual(r.valor_por_peca, 10.56);
   assert.strictEqual(r.total_pecas, round2(10.56 * 3));
+});
+
+// ─── Imposto embutido ───────────────────────────────────────────────────────
+// O percentual não aparece no PDF, então a exigência é que tudo feche na soma:
+// cada linha já sai com imposto e os totais são a soma dessas linhas.
+
+test('imposto entra no preço por peça, não como linha no fim', () => {
+  const r = calcularItem(item(), 7, 1.1);
+  assert.strictEqual(r.custo_material, 30);        // o custo não muda
+  assert.strictEqual(r.custo_impressao, 14);
+  assert.strictEqual(r.valor_por_peca, 48.4);      // 44 × 1,10
+  assert.strictEqual(r.total_pecas, 48.4);
+});
+
+test('sem imposto nada muda no valor por peça', () => {
+  const semParametro = calcularItem(item(), 7);
+  const comZero = calcularOrcamento({ valor_hora_maquina: 7, itens: [item()], imposto_percentual: 0 });
+  assert.strictEqual(semParametro.valor_por_peca, 44);
+  assert.strictEqual(comZero.total_geral, 44);
+  assert.strictEqual(comZero.total_imposto, 0);
+});
+
+test('total geral é a soma das linhas já com imposto', () => {
+  const r = calcularOrcamento({
+    valor_hora_maquina: 7,
+    itens: [item({ servicos: [{ valor_hora: 120, quantidade_horas: 2 }] })],  // 44 + 240
+    servicos_gerais: [{ valor_hora: 80, quantidade_horas: 3 }],               // 240
+    imposto_percentual: 10,
+  });
+  assert.strictEqual(r.total_itens, 48.4);            // 44 × 1,10
+  assert.strictEqual(r.total_servicos_itens, 264);    // 240 × 1,10
+  assert.strictEqual(r.total_servicos_gerais, 264);
+  assert.strictEqual(r.total_geral, 576.4);
+  assert.strictEqual(r.total_itens + r.total_servicos_itens + r.total_servicos_gerais, r.total_geral);
+});
+
+test('total_imposto é a diferença exata para a mesma conta sem imposto', () => {
+  const base = { valor_hora_maquina: 7, itens: [item(), item({ quantidade: 3 })] };
+  const sem = calcularOrcamento(base);
+  const com = calcularOrcamento({ ...base, imposto_percentual: 12.5 });
+  assert.strictEqual(com.total_imposto, round2(com.total_geral - sem.total_geral));
+  assert.ok(com.total_imposto > 0);
+});
+
+test('imposto no orçamento de venda entra no unitário e a linha fecha', () => {
+  const r = calcularOrcamentoVenda({
+    produtos: [{ quantidade: 3, preco_unitario: 100, desconto_tipo: 'percentual', desconto: 10 }],
+    imposto_percentual: 20,
+  });
+  const linha = r.produtos[0];
+  assert.strictEqual(linha.preco_cobrado, 120);                           // 100 × 1,20
+  assert.strictEqual(linha.total_bruto, 360);                             // 3 × 120
+  assert.strictEqual(linha.total_desconto, 36);                           // 10%
+  assert.strictEqual(linha.total_item, 324);
+  assert.strictEqual(round2(linha.quantidade * linha.preco_cobrado - linha.total_desconto), linha.total_item);
+  assert.strictEqual(r.total_geral, 324);
+  assert.strictEqual(r.total_imposto, 54);                                // 324 − 270
 });

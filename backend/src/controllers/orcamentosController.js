@@ -1,7 +1,10 @@
 const db = require('../utils/db');
 const PDFDocument = require('pdfkit');
 const { buscarPorChave } = require('./configuracoesController');
-const { recalcularOrcamento } = require('../utils/calculoOrcamento');
+const {
+  recalcularOrcamento, impostoDoOrcamento, validarImposto,
+  fatorImposto, precoComImposto,
+} = require('../utils/calculoOrcamento');
 const { proximoNumero, registrarHistorico, rotulos } = require('../utils/documentos');
 const {
   construirFiltro, granularidade, FORMATO_PERIODO,
@@ -17,8 +20,10 @@ const validarServico = (servico, onde) => {
   return null;
 };
 
-const validarPayload = ({ cliente_id, itens, servicos_gerais }) => {
+const validarPayload = ({ cliente_id, itens, servicos_gerais, imposto_percentual }) => {
   if (!cliente_id) return 'Selecione o cliente';
+  const erroImposto = validarImposto(imposto_percentual);
+  if (erroImposto) return erroImposto;
   if (!Array.isArray(itens) || itens.length === 0) return 'Inclua ao menos um item no orçamento';
 
   for (const [i, item] of itens.entries()) {
@@ -294,16 +299,31 @@ const carregarOrcamento = async (executor, id) => {
            c.nome AS cliente_nome, c.rua, c.numero, c.complemento, c.bairro,
            c.cidade, c.estado, c.cep, c.cpf_cnpj, c.tipo_documento,
            u.nome AS criado_por_nome,
-           a.nome AS aprovado_por_nome
+           a.nome AS aprovado_por_nome,
+           nf.id AS nf_id, nf.numero AS nf_numero, nf.emitida_em AS nf_emitida_em,
+           nf.observacao AS nf_observacao, nf.arquivo_nome AS nf_arquivo_nome,
+           nf.arquivo_tamanho AS nf_arquivo_tamanho
       FROM orcamentos o
       JOIN clientes c ON o.cliente_id = c.id
       JOIN usuarios u ON o.criado_por = u.id
       LEFT JOIN usuarios a ON o.aprovado_por = a.id
+      -- Só os dados da nota; o PDF dela nunca entra aqui.
+      LEFT JOIN notas_fiscais nf ON nf.orcamento_id = o.id
      WHERE o.id = ?
   `, [id]);
 
   if (rows.length === 0) return null;
-  const orcamento = rows[0];
+  const { nf_id, nf_numero, nf_emitida_em, nf_observacao,
+    nf_arquivo_nome, nf_arquivo_tamanho, ...orcamento } = rows[0];
+
+  orcamento.nota_fiscal = nf_id ? {
+    id: nf_id,
+    numero: nf_numero,
+    emitida_em: nf_emitida_em,
+    observacao: nf_observacao,
+    arquivo_nome: nf_arquivo_nome,
+    arquivo_tamanho: nf_arquivo_tamanho,
+  } : null;
 
   // Orçamento de venda tem produtos, não peças impressas — carrega só o que existe.
   if (orcamento.tipo === 'produto') {
@@ -370,9 +390,13 @@ const resolverHoraMaquina = async (valorDoCliente) => {
 };
 
 const criar = async (req, res) => {
-  const { cliente_id, observacao, itens, servicos_gerais = [] } = req.body;
+  const {
+    cliente_id, observacao, itens, servicos_gerais = [], imposto_percentual,
+  } = req.body;
 
-  const erroValidacao = validarPayload({ cliente_id, itens, servicos_gerais });
+  const erroValidacao = validarPayload({
+    cliente_id, itens, servicos_gerais, imposto_percentual,
+  });
   if (erroValidacao) return res.status(400).json({ erro: erroValidacao });
 
   const conn = await db.getConnection();
@@ -380,7 +404,8 @@ const criar = async (req, res) => {
     await conn.beginTransaction();
 
     const [cliente] = await conn.query(
-      'SELECT id, valor_hora_maquina FROM clientes WHERE id = ?', [cliente_id]
+      'SELECT id, valor_hora_maquina, imposto_percentual FROM clientes WHERE id = ?',
+      [cliente_id]
     );
     if (cliente.length === 0) {
       await conn.rollback();
@@ -388,13 +413,16 @@ const criar = async (req, res) => {
     }
 
     const valorHoraMaquina = await resolverHoraMaquina(cliente[0].valor_hora_maquina);
+    const imposto = impostoDoOrcamento(imposto_percentual, cliente[0].imposto_percentual);
     const numeroOrcamento = await proximoNumero(conn, 'orcamento');
 
     const [result] = await conn.query(
       `INSERT INTO orcamentos
-         (tipo, numero_orcamento, cliente_id, observacao, valor_hora_maquina, status, criado_por)
-       VALUES ('impressao', ?, ?, ?, ?, 'rascunho', ?)`,
-      [numeroOrcamento, cliente_id, observacao?.trim() || null, valorHoraMaquina, req.usuario.id]
+         (tipo, numero_orcamento, cliente_id, observacao, valor_hora_maquina,
+          imposto_percentual, status, criado_por)
+       VALUES ('impressao', ?, ?, ?, ?, ?, 'rascunho', ?)`,
+      [numeroOrcamento, cliente_id, observacao?.trim() || null, valorHoraMaquina,
+       imposto, req.usuario.id]
     );
     const orcamentoId = result.insertId;
 
@@ -430,9 +458,13 @@ const criar = async (req, res) => {
 };
 
 const atualizar = async (req, res) => {
-  const { cliente_id, observacao, itens, servicos_gerais = [] } = req.body;
+  const {
+    cliente_id, observacao, itens, servicos_gerais = [], imposto_percentual,
+  } = req.body;
 
-  const erroValidacao = validarPayload({ cliente_id, itens, servicos_gerais });
+  const erroValidacao = validarPayload({
+    cliente_id, itens, servicos_gerais, imposto_percentual,
+  });
   if (erroValidacao) return res.status(400).json({ erro: erroValidacao });
 
   const conn = await db.getConnection();
@@ -440,7 +472,8 @@ const atualizar = async (req, res) => {
     await conn.beginTransaction();
 
     const [[orcamento]] = await conn.query(
-      'SELECT id, tipo, total_geral FROM orcamentos WHERE id = ? FOR UPDATE',
+      `SELECT id, tipo, total_geral, imposto_percentual
+         FROM orcamentos WHERE id = ? FOR UPDATE`,
       [req.params.id]
     );
     if (!orcamento) {
@@ -469,8 +502,11 @@ const atualizar = async (req, res) => {
     );
 
     await conn.query(
-      'UPDATE orcamentos SET cliente_id = ?, observacao = ? WHERE id = ?',
-      [cliente_id, observacao?.trim() || null, orcamento.id]
+      `UPDATE orcamentos
+          SET cliente_id = ?, observacao = ?, imposto_percentual = ?
+        WHERE id = ?`,
+      [cliente_id, observacao?.trim() || null,
+       impostoDoOrcamento(imposto_percentual, orcamento.imposto_percentual), orcamento.id]
     );
 
     const { erro } = await gravarFilhos(conn, orcamento.id, { itens, servicos_gerais }, {
@@ -522,10 +558,14 @@ const reprecificar = async (req, res) => {
     }
 
     const [[cliente]] = await conn.query(
-      'SELECT valor_hora_maquina FROM clientes WHERE id = ?', [orcamento.cliente_id]
+      'SELECT valor_hora_maquina, imposto_percentual FROM clientes WHERE id = ?',
+      [orcamento.cliente_id]
     );
     const valorHoraMaquina = await resolverHoraMaquina(cliente?.valor_hora_maquina);
-    await conn.query('UPDATE orcamentos SET valor_hora_maquina = ? WHERE id = ?', [valorHoraMaquina, orcamento.id]);
+    await conn.query(
+      'UPDATE orcamentos SET valor_hora_maquina = ?, imposto_percentual = ? WHERE id = ?',
+      [valorHoraMaquina, impostoDoOrcamento(undefined, cliente?.imposto_percentual), orcamento.id]
+    );
 
     await conn.query(`
       UPDATE orcamento_itens i
@@ -700,6 +740,11 @@ const gerarPDF = async (req, res) => {
     const numeroAprovado = orc[rotulo.campoNumeroAprovado];
     const ehOS = orc.status === 'aprovado' && !!numeroAprovado;
     const ehVenda = orc.tipo === 'produto';
+    // O imposto já está dentro de cada valor gravado. O PDF não o nomeia em lugar
+    // nenhum — só esconde as memórias de cálculo, que mostrariam o preço sem ele e
+    // não fechariam com o total impresso.
+    const temImposto = parseFloat(orc.imposto_percentual) > 0;
+    const fator = fatorImposto(orc.imposto_percentual);
     const titulo = ehOS ? rotulo.tituloPdfAprovado : rotulo.tituloPdfOrcamento;
     const numero = ehOS ? numeroAprovado : orc.numero_orcamento;
 
@@ -788,7 +833,7 @@ const gerarPDF = async (req, res) => {
           [i + 1, ESQ + 5, 18],
           [p.descricao, ESQ + 23, 210],
           [`${fmtNum(p.quantidade, 3).replace(/,000$/, '')} ${p.unidade}`, ESQ + 236, 46, 'right'],
-          [fmtMoeda(p.preco_unitario), ESQ + 286, 62, 'right'],
+          [fmtMoeda(precoComImposto(p.preco_unitario, fator)), ESQ + 286, 62, 'right'],
           [p.total_desconto > 0 ? `- ${fmtMoeda(p.total_desconto)}` : '—', ESQ + 352, 55, 'right'],
           [fmtMoeda(p.total_item), ESQ + 411, 79, 'right'],
         ], i);
@@ -833,19 +878,24 @@ const gerarPDF = async (req, res) => {
       ], i, { negrito: false });
 
       // Memória de cálculo, para o cliente conferir de onde saiu o valor unitário.
+      // Com imposto embutido ela mostraria o preço de antes e não fecharia com a
+      // coluna Unitário — então sai de cena, e fica só a natureza da peça.
       espaco(14);
-      doc.font('Helvetica').fontSize(7.5).fillColor('#999999').text(
-        `${fmtNum(item.peso_gramas)}g × ${fmtMoeda(item.custo_por_grama)}/g = ${fmtMoeda(item.custo_material)}` +
-        `   +   ${fmtNum(item.horas_impressao)}h × ${fmtMoeda(orc.valor_hora_maquina)}/h = ${fmtMoeda(item.custo_impressao)}` +
-        `   ·   ${item.tipo_peca === 'tecnica' ? 'Peça técnica' : 'Decorativa'}`,
-        ESQ + 25, y + 1, { width: 465 }
-      );
+      const memoria = temImposto
+        ? `${item.tipo_peca === 'tecnica' ? 'Peça técnica' : 'Decorativa'}`
+        : `${fmtNum(item.peso_gramas)}g × ${fmtMoeda(item.custo_por_grama)}/g = ${fmtMoeda(item.custo_material)}`
+          + `   +   ${fmtNum(item.horas_impressao)}h × ${fmtMoeda(orc.valor_hora_maquina)}/h = ${fmtMoeda(item.custo_impressao)}`
+          + `   ·   ${item.tipo_peca === 'tecnica' ? 'Peça técnica' : 'Decorativa'}`;
+      doc.font('Helvetica').fontSize(7.5).fillColor('#999999')
+        .text(memoria, ESQ + 25, y + 1, { width: 465 });
       y += 13;
 
       item.servicos.forEach((s) => {
         espaco(16);
         doc.font('Helvetica').fontSize(8).fillColor(CORES.accent).text(
-          `↳ ${s.servico_nome} — ${fmtNum(s.quantidade_horas)}h × ${fmtMoeda(s.valor_hora)}/h`,
+          temImposto
+            ? `↳ ${s.servico_nome} — ${fmtNum(s.quantidade_horas)}h`
+            : `↳ ${s.servico_nome} — ${fmtNum(s.quantidade_horas)}h × ${fmtMoeda(s.valor_hora)}/h`,
           ESQ + 30, y + 2, { width: 340 }
         );
         doc.font('Helvetica-Bold').fillColor(CORES.accent)
@@ -877,7 +927,8 @@ const gerarPDF = async (req, res) => {
         linhaTabela([
           [s.servico_nome, ESQ + 5, 245],
           [`${fmtNum(s.quantidade_horas)} h`, ESQ + 255, 60, 'right'],
-          [fmtMoeda(s.valor_hora), ESQ + 320, 80, 'right'],
+          // Com imposto o valor/hora do cadastro não multiplica para o total impresso.
+          [temImposto ? '—' : fmtMoeda(s.valor_hora), ESQ + 320, 80, 'right'],
           [fmtMoeda(s.total), ESQ + 405, 85, 'right'],
         ], i);
       });

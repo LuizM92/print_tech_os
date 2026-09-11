@@ -38,6 +38,7 @@ const vazio = {
   contato_nome: '', contato_cargo: '', telefone: '', celular: '', email: '',
   banco: '', agencia: '', conta: '', tipo_conta: '', pix_tipo: '', pix_chave: '',
   condicao_pagamento: '', limite_credito: '', observacoes: '', valor_hora_maquina: '',
+  imposto_percentual: '',
 };
 
 /**
@@ -104,6 +105,8 @@ export default function Clientes() {
     preenchido.limite_credito = c.limite_credito != null ? String(parseFloat(c.limite_credito)) : '';
     preenchido.valor_hora_maquina = c.valor_hora_maquina != null
       ? String(parseFloat(c.valor_hora_maquina)) : '';
+    preenchido.imposto_percentual = c.imposto_percentual != null
+      ? String(parseFloat(c.imposto_percentual)) : '';
     setForm(preenchido);
     setEditId(c.id);
     setResumoFicha(null);
@@ -636,6 +639,26 @@ export default function Clientes() {
                 {parseFloat(form.valor_hora_maquina) > 0
                   ? `${fmtMoeda(form.valor_hora_maquina)}/h só para este cliente`
                   : 'Em branco, vale a hora-máquina global das configurações'}
+              </div>
+            </div>
+
+            {/* Entra no preço dos orçamentos deste cliente, mas não aparece no PDF —
+                é controle interno. O orçamento copia este valor e pode ajustá-lo. */}
+            <div className="form-group">
+              <label>Imposto (%)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={form.imposto_percentual}
+                onChange={campo('imposto_percentual')}
+                placeholder="Sem imposto"
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                {parseFloat(form.imposto_percentual) > 0
+                  ? 'Embutido no preço — não aparece no PDF do orçamento'
+                  : 'Em branco, o orçamento sai sem imposto'}
               </div>
             </div>
           </div>

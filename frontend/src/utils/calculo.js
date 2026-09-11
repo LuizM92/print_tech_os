@@ -26,24 +26,30 @@ const precoVigente = (id, orcados, catalogo, campo) => {
   return cadastro ? num(cadastro[campo]) : 0;
 };
 
-export const calcularServico = (servico, catalogoServicos, servicosOrcados) => {
+/** Multiplicador que embute o imposto no preço. Sem imposto é exatamente 1. */
+export const fatorImposto = (percentual) => 1 + num(percentual) / 100;
+
+export const calcularServico = (servico, catalogoServicos, servicosOrcados, fator = 1) => {
   const servicoId = parseInt(servico.servico_id, 10);
   const valor_hora = precoVigente(servicoId, servicosOrcados, catalogoServicos, 'valor_hora');
   const quantidade_horas = num(servico.quantidade_horas);
-  return { valor_hora, quantidade_horas, total: round2(valor_hora * quantidade_horas) };
+  return { valor_hora, quantidade_horas, total: round2(valor_hora * quantidade_horas * fator) };
 };
 
-export const calcularItem = (item, { valorHoraMaquina, materiais, servicos, materiaisOrcados, servicosOrcados }) => {
+export const calcularItem = (item, {
+  valorHoraMaquina, materiais, servicos, materiaisOrcados, servicosOrcados, fator = 1,
+}) => {
   const custo_por_grama = precoVigente(
     parseInt(item.material_id, 10), materiaisOrcados, materiais, 'custo_por_grama'
   );
 
   const custo_material = round2(num(item.peso_gramas) * custo_por_grama);
   const custo_impressao = round2(num(item.horas_impressao) * num(valorHoraMaquina));
-  const valor_por_peca = round2(custo_material + custo_impressao);
+  const valor_por_peca = round2((custo_material + custo_impressao) * fator);
   const total_pecas = round2(valor_por_peca * (parseInt(item.quantidade, 10) || 0));
 
-  const servicosCalc = (item.servicos || []).map((s) => calcularServico(s, servicos, servicosOrcados));
+  const servicosCalc = (item.servicos || [])
+    .map((s) => calcularServico(s, servicos, servicosOrcados, fator));
   const total_servicos = round2(servicosCalc.reduce((acc, s) => acc + s.total, 0));
 
   return {
@@ -57,13 +63,20 @@ export const calcularItem = (item, { valorHoraMaquina, materiais, servicos, mate
   };
 };
 
-export const calcularOrcamento = ({ itens, servicos_gerais }, contexto) => {
-  const itensCalc = itens.map((i) => calcularItem(i, contexto));
-  const geraisCalc = servicos_gerais.map((s) => calcularServico(s, contexto.servicos, contexto.servicosOrcados));
+export const calcularOrcamento = ({ itens, servicos_gerais, imposto_percentual = 0 }, contexto) => {
+  const fator = fatorImposto(imposto_percentual);
+  const itensCalc = itens.map((i) => calcularItem(i, { ...contexto, fator }));
+  const geraisCalc = servicos_gerais
+    .map((s) => calcularServico(s, contexto.servicos, contexto.servicosOrcados, fator));
 
   const total_itens = round2(itensCalc.reduce((acc, i) => acc + i.total_pecas, 0));
   const total_servicos_itens = round2(itensCalc.reduce((acc, i) => acc + i.total_servicos, 0));
   const total_servicos_gerais = round2(geraisCalc.reduce((acc, s) => acc + s.total, 0));
+
+  const total_geral = round2(total_itens + total_servicos_itens + total_servicos_gerais);
+  const semImposto = fator === 1
+    ? null
+    : calcularOrcamento({ itens, servicos_gerais }, contexto);
 
   return {
     itens: itensCalc,
@@ -71,7 +84,8 @@ export const calcularOrcamento = ({ itens, servicos_gerais }, contexto) => {
     total_itens,
     total_servicos_itens,
     total_servicos_gerais,
-    total_geral: round2(total_itens + total_servicos_itens + total_servicos_gerais),
+    total_imposto: semImposto ? round2(total_geral - semImposto.total_geral) : 0,
+    total_geral,
   };
 };
 
@@ -86,19 +100,32 @@ const calcularDesconto = (base, tipo, desconto) => {
   return round2(Math.min(bruto, valorBase));
 };
 
-export const calcularProduto = (produto) => {
-  const total_bruto = round2(num(produto.quantidade) * num(produto.preco_unitario));
+export const calcularProduto = (produto, fator = 1) => {
+  const preco_cobrado = round2(num(produto.preco_unitario) * fator);
+  const total_bruto = round2(num(produto.quantidade) * preco_cobrado);
   const total_desconto = calcularDesconto(total_bruto, produto.desconto_tipo, produto.desconto);
-  return { total_bruto, total_desconto, total_item: round2(total_bruto - total_desconto) };
+  return {
+    preco_cobrado,
+    total_bruto,
+    total_desconto,
+    total_item: round2(total_bruto - total_desconto),
+  };
 };
 
-export const calcularOrcamentoVenda = ({ produtos = [], desconto_tipo = 'percentual', desconto = 0 }) => {
-  const itens = produtos.map(calcularProduto);
+export const calcularOrcamentoVenda = ({
+  produtos = [], desconto_tipo = 'percentual', desconto = 0, imposto_percentual = 0,
+}) => {
+  const fator = fatorImposto(imposto_percentual);
+  const itens = produtos.map((p) => calcularProduto(p, fator));
 
   const total_produtos = round2(itens.reduce((acc, i) => acc + i.total_bruto, 0));
   const desconto_itens = round2(itens.reduce((acc, i) => acc + i.total_desconto, 0));
   const subtotal = round2(total_produtos - desconto_itens);
   const desconto_geral = calcularDesconto(subtotal, desconto_tipo, desconto);
+  const total_geral = round2(subtotal - desconto_geral);
+  const semImposto = fator === 1
+    ? null
+    : calcularOrcamentoVenda({ produtos, desconto_tipo, desconto });
 
   return {
     produtos: itens,
@@ -107,6 +134,7 @@ export const calcularOrcamentoVenda = ({ produtos = [], desconto_tipo = 'percent
     desconto_geral,
     total_descontos: round2(desconto_itens + desconto_geral),
     subtotal,
-    total_geral: round2(subtotal - desconto_geral),
+    total_imposto: semImposto ? round2(total_geral - semImposto.total_geral) : 0,
+    total_geral,
   };
 };

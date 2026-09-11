@@ -20,6 +20,7 @@ const CAMPOS = [
   'banco', 'agencia', 'conta', 'tipo_conta', 'pix_tipo', 'pix_chave',
   // comercial
   'condicao_pagamento', 'limite_credito', 'observacoes', 'valor_hora_maquina',
+  'imposto_percentual',
 ];
 
 const texto = (v) => {
@@ -81,6 +82,8 @@ const normalizar = (corpo) => {
     limite_credito: numeroOu(corpo.limite_credito),
     // Nulo não é zero: quer dizer que este cliente segue a hora-máquina das configurações.
     valor_hora_maquina: numeroOu(corpo.valor_hora_maquina),
+    // Percentual embutido no preço dos orçamentos deste cliente. Nulo = sem imposto.
+    imposto_percentual: numeroOu(corpo.imposto_percentual),
     observacoes: texto(corpo.observacoes),
   };
 };
@@ -100,6 +103,9 @@ const validar = (c) => {
   if (c.markup < 0) return 'Markup não pode ser negativo';
   if (c.valor_hora_maquina !== null && !(c.valor_hora_maquina > 0)) {
     return 'Hora-máquina do cliente deve ser maior que zero — deixe em branco para usar a global';
+  }
+  if (c.imposto_percentual !== null && (c.imposto_percentual < 0 || c.imposto_percentual > 100)) {
+    return 'Imposto deve ser um percentual entre 0 e 100';
   }
   return null;
 };

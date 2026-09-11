@@ -13,11 +13,30 @@ const uploadFicha = multer({
   },
 }).single('ficha');
 
+// O anexo da NF vai para o banco, então também é lido em memória.
+const uploadNota = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const aceitos = ['application/pdf', 'image/png', 'image/jpeg'];
+    if (aceitos.includes(file.mimetype)) return cb(null, true);
+    cb(new Error('O anexo da NF deve ser PDF, PNG ou JPEG'));
+  },
+}).single('arquivo');
+
 /** Traduz os erros do multer (tamanho, tipo) em respostas com mensagem legível. */
 const receberFicha = (req, res, next) => uploadFicha(req, res, (err) => {
   if (!err) return next();
   const mensagem = err.code === 'LIMIT_FILE_SIZE'
     ? 'O PDF passa de 8 MB. Envie um arquivo menor.'
+    : err.message;
+  res.status(400).json({ erro: mensagem });
+});
+
+const receberNota = (req, res, next) => uploadNota(req, res, (err) => {
+  if (!err) return next();
+  const mensagem = err.code === 'LIMIT_FILE_SIZE'
+    ? 'O anexo passa de 8 MB. Envie um arquivo menor.'
     : err.message;
   res.status(400).json({ erro: mensagem });
 });
@@ -32,6 +51,7 @@ const produtosCtrl = require('../controllers/produtosController');
 const fabricacaoCtrl = require('../controllers/fabricacaoController');
 const producaoCtrl = require('../controllers/producaoController');
 const configCtrl = require('../controllers/configuracoesController');
+const notasCtrl = require('../controllers/notasFiscaisController');
 
 // Auth
 router.post('/auth/login', authCtrl.login);
@@ -98,6 +118,12 @@ router.get('/orcamentos/:id', autenticar, orcamentosCtrl.buscarPorId);
 router.patch('/orcamentos/:id/status', autenticar, orcamentosCtrl.alterarStatus);
 router.delete('/orcamentos/:id', autenticar, apenasAdmin, orcamentosCtrl.excluir);
 router.get('/orcamentos/:id/pdf', autenticar, orcamentosCtrl.gerarPDF);
+
+// Nota fiscal emitida em outra plataforma — aqui só fica o registro e o anexo.
+router.post('/orcamentos/:id/nota-fiscal', autenticar, receberNota, notasCtrl.salvar);
+router.get('/orcamentos/:id/nota-fiscal/arquivo', autenticar, notasCtrl.baixarArquivo);
+router.delete('/orcamentos/:id/nota-fiscal/arquivo', autenticar, notasCtrl.removerArquivo);
+router.delete('/orcamentos/:id/nota-fiscal', autenticar, notasCtrl.excluir);
 
 // Orçamento de impressão — itens com material, peso e horas
 router.post('/orcamentos', autenticar, orcamentosCtrl.criar);

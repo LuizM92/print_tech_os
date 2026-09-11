@@ -51,7 +51,7 @@ export default function EditorOrcamento() {
   const [valorHoraMaquina, setValorHoraMaquina] = useState(7.0);
   const [horaMaquinaGlobal, setHoraMaquinaGlobal] = useState(7.0);
 
-  const [form, setForm] = useState({ cliente_id: '', observacao: '' });
+  const [form, setForm] = useState({ cliente_id: '', observacao: '', imposto_percentual: '' });
   const [itens, setItens] = useState([itemVazio()]);
   const [servicosGerais, setServicosGerais] = useState([]);
 
@@ -83,7 +83,12 @@ export default function EditorOrcamento() {
 
         if (editando) {
           const { data } = await api.get(`/orcamentos/${id}`);
-          setForm({ cliente_id: String(data.cliente_id), observacao: data.observacao || '' });
+          setForm({
+            cliente_id: String(data.cliente_id),
+            observacao: data.observacao || '',
+            imposto_percentual: parseFloat(data.imposto_percentual) > 0
+              ? String(parseFloat(data.imposto_percentual)) : '',
+          });
           setStatusOrcamento(data.status);
           setNumeroOrcamento(data.numero_orcamento);
           // Preserva o hora-máquina com que o orçamento foi feito, não o valor atual.
@@ -146,17 +151,31 @@ export default function EditorOrcamento() {
     setValorHoraMaquina(horaMaquinaDoCliente ?? horaMaquinaGlobal);
   }, [editando, horaMaquinaDoCliente, horaMaquinaGlobal]);
 
+  const impostoDoCliente = clienteSelecionado?.imposto_percentual;
+
+  useEffect(() => {
+    // O imposto do cliente entra como sugestão no orçamento novo; daí em diante
+    // quem manda é o campo, que pode ser zerado para este orçamento específico.
+    if (editando) return;
+    setForm((p) => ({
+      ...p,
+      imposto_percentual: parseFloat(impostoDoCliente) > 0
+        ? String(parseFloat(impostoDoCliente)) : '',
+    }));
+  }, [editando, impostoDoCliente]);
+
   // ── Cálculo ao vivo (o valor gravado é sempre o que o servidor calcula) ──
   const calculo = useMemo(
     () => calcularOrcamento(
-      { itens, servicos_gerais: servicosGerais },
+      { itens, servicos_gerais: servicosGerais, imposto_percentual: form.imposto_percentual },
       {
         valorHoraMaquina, materiais, servicos,
         materiaisOrcados: custosOrcados.materiais,
         servicosOrcados: custosOrcados.servicos,
       }
     ),
-    [itens, servicosGerais, valorHoraMaquina, materiais, servicos, custosOrcados]
+    [itens, servicosGerais, valorHoraMaquina, materiais, servicos, custosOrcados,
+      form.imposto_percentual]
   );
 
   // ── Manipulação de itens ────────────────────────────────────────────────
@@ -200,6 +219,7 @@ export default function EditorOrcamento() {
   const montarPayload = () => ({
     cliente_id: parseInt(form.cliente_id, 10),
     observacao: form.observacao,
+    imposto_percentual: parseFloat(form.imposto_percentual) || 0,
     itens: itens.map((item) => ({
       id: item.id,
       descricao: item.descricao,
@@ -290,6 +310,25 @@ export default function EditorOrcamento() {
                   valor={form.cliente_id}
                   onChange={(id) => setForm((p) => ({ ...p, cliente_id: id }))}
                 />
+
+                {/* Controle interno: entra no preço e não aparece no PDF. */}
+                <div className="form-group" style={{ marginTop: 14, maxWidth: 220 }}>
+                  <label>Imposto (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={form.imposto_percentual}
+                    onChange={(e) => setForm((p) => ({ ...p, imposto_percentual: e.target.value }))}
+                    placeholder="Sem imposto"
+                  />
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                    {calculo.total_imposto > 0
+                      ? `${fmtMoeda(calculo.total_imposto)} embutidos no preço — não aparece no PDF`
+                      : 'Não aparece no PDF; entra embutido no preço das linhas'}
+                  </div>
+                </div>
               </div>
 
               {/* ── Itens ───────────────────────────────────────────── */}
@@ -396,6 +435,13 @@ export default function EditorOrcamento() {
                     <div className="os-summary-row">
                       <span>Serviços gerais</span>
                       <span>{fmtMoeda(calculo.total_servicos_gerais)}</span>
+                    </div>
+                  )}
+
+                  {calculo.total_imposto > 0 && (
+                    <div className="os-summary-row" style={{ color: 'var(--text-muted)' }}>
+                      <span>Imposto embutido ({parseFloat(form.imposto_percentual)}%)</span>
+                      <span>{fmtMoeda(calculo.total_imposto)}</span>
                     </div>
                   )}
 

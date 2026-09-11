@@ -12,6 +12,11 @@
  *   total_pecas     = valor_por_peca × quantidade
  *   total_servicos  = Σ (valor_hora × quantidade_horas)
  *   total_item      = total_pecas + total_servicos
+ *
+ * O imposto do orçamento, quando existe, entra como fator em cada linha — e não
+ * como uma linha própria no fim. É o que faz o PDF fechar na conta sem nunca dizer
+ * o percentual: cada valor impresso já é o valor com imposto, e a soma deles é o
+ * total. Quanto disso é imposto fica em `total_imposto`, só para as telas internas.
  */
 
 // Todo valor monetário é arredondado no ponto em que seria gravado (as colunas são
@@ -27,18 +32,41 @@ const num = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const calcularServico = (servico) => {
+/**
+ * Percentual de imposto de um orçamento: o que veio no formulário, senão o padrão
+ * do cadastro do cliente. Zero informado é uma escolha e é respeitada — por isso a
+ * checagem é "veio um número", e não "veio um número maior que zero".
+ */
+const impostoDoOrcamento = (informado, padraoDoCliente) => {
+  const escolhido = parseFloat(informado);
+  if (Number.isFinite(escolhido) && escolhido >= 0) return round2(escolhido);
+  const padrao = parseFloat(padraoDoCliente);
+  return Number.isFinite(padrao) && padrao > 0 ? round2(padrao) : 0;
+};
+
+/** Recusa percentual fora de 0–100. Devolve a mensagem de erro, ou null. */
+const validarImposto = (valor) => {
+  if (valor === undefined || valor === null || valor === '') return null;
+  const n = parseFloat(valor);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return 'Imposto deve ser um percentual entre 0 e 100';
+  return null;
+};
+
+/** Multiplicador que embute o imposto no preço. Sem imposto é exatamente 1. */
+const fatorImposto = (percentual) => 1 + num(percentual) / 100;
+
+const calcularServico = (servico, fator = 1) => {
   const valor_hora = num(servico.valor_hora);
   const quantidade_horas = num(servico.quantidade_horas);
   return {
     ...servico,
     valor_hora,
     quantidade_horas,
-    total: round2(valor_hora * quantidade_horas),
+    total: round2(valor_hora * quantidade_horas * fator),
   };
 };
 
-const calcularItem = (item, valorHoraMaquina) => {
+const calcularItem = (item, valorHoraMaquina, fator = 1) => {
   const peso_gramas = num(item.peso_gramas);
   const custo_por_grama = num(item.custo_por_grama);
   const horas_impressao = num(item.horas_impressao);
@@ -47,10 +75,12 @@ const calcularItem = (item, valorHoraMaquina) => {
 
   const custo_material = round2(peso_gramas * custo_por_grama);
   const custo_impressao = round2(horas_impressao * valor_hora_maquina);
-  const valor_por_peca = round2(custo_material + custo_impressao);
+  // custo_material + custo_impressao é o custo; valor_por_peca é o preço. Com
+  // imposto os dois deixam de bater — o PDF esconde a memória de cálculo nesse caso.
+  const valor_por_peca = round2((custo_material + custo_impressao) * fator);
   const total_pecas = round2(valor_por_peca * quantidade);
 
-  const servicos = (item.servicos || []).map(calcularServico);
+  const servicos = (item.servicos || []).map((s) => calcularServico(s, fator));
   const total_servicos = round2(servicos.reduce((acc, s) => acc + s.total, 0));
 
   return {
@@ -69,14 +99,25 @@ const calcularItem = (item, valorHoraMaquina) => {
   };
 };
 
-const calcularOrcamento = ({ valor_hora_maquina, itens = [], servicos_gerais = [] }) => {
+const calcularOrcamento = ({
+  valor_hora_maquina, itens = [], servicos_gerais = [], imposto_percentual = 0,
+}) => {
   const valorHoraMaquina = num(valor_hora_maquina);
-  const itensCalculados = itens.map((i) => calcularItem(i, valorHoraMaquina));
-  const geraisCalculados = servicos_gerais.map(calcularServico);
+  const fator = fatorImposto(imposto_percentual);
+  const itensCalculados = itens.map((i) => calcularItem(i, valorHoraMaquina, fator));
+  const geraisCalculados = servicos_gerais.map((s) => calcularServico(s, fator));
 
   const total_itens = round2(itensCalculados.reduce((acc, i) => acc + i.total_pecas, 0));
   const total_servicos_itens = round2(itensCalculados.reduce((acc, i) => acc + i.total_servicos, 0));
   const total_servicos_gerais = round2(geraisCalculados.reduce((acc, s) => acc + s.total, 0));
+
+  const total_geral = round2(total_itens + total_servicos_itens + total_servicos_gerais);
+
+  // Refaz a conta sem imposto para saber, ao centavo, quanto dele é imposto —
+  // dividir o total pelo fator erraria os arredondamentos de cada linha.
+  const semImposto = fator === 1
+    ? null
+    : calcularOrcamento({ valor_hora_maquina, itens, servicos_gerais });
 
   return {
     valor_hora_maquina: valorHoraMaquina,
@@ -85,7 +126,9 @@ const calcularOrcamento = ({ valor_hora_maquina, itens = [], servicos_gerais = [
     total_itens,
     total_servicos_itens,
     total_servicos_gerais,
-    total_geral: round2(total_itens + total_servicos_itens + total_servicos_gerais),
+    imposto_percentual: num(imposto_percentual),
+    total_imposto: semImposto ? round2(total_geral - semImposto.total_geral) : 0,
+    total_geral,
   };
 };
 
@@ -96,7 +139,7 @@ const calcularOrcamento = ({ valor_hora_maquina, itens = [], servicos_gerais = [
  */
 const recalcularOrcamento = async (conn, orcamentoId) => {
   const [[orcamento]] = await conn.query(
-    'SELECT id, valor_hora_maquina FROM orcamentos WHERE id = ?',
+    'SELECT id, valor_hora_maquina, imposto_percentual FROM orcamentos WHERE id = ?',
     [orcamentoId]
   );
   if (!orcamento) throw new Error(`Orçamento ${orcamentoId} não encontrado`);
@@ -112,6 +155,7 @@ const recalcularOrcamento = async (conn, orcamentoId) => {
 
   const resultado = calcularOrcamento({
     valor_hora_maquina: orcamento.valor_hora_maquina,
+    imposto_percentual: orcamento.imposto_percentual,
     itens: itens.map((i) => ({
       ...i,
       servicos: servicos.filter((s) => s.item_id === i.id),
@@ -136,10 +180,12 @@ const recalcularOrcamento = async (conn, orcamentoId) => {
 
   await conn.query(
     `UPDATE orcamentos
-        SET total_itens = ?, total_servicos_itens = ?, total_servicos_gerais = ?, total_geral = ?
+        SET total_itens = ?, total_servicos_itens = ?, total_servicos_gerais = ?,
+            total_imposto = ?, total_geral = ?
       WHERE id = ?`,
     [resultado.total_itens, resultado.total_servicos_itens,
-     resultado.total_servicos_gerais, resultado.total_geral, orcamentoId]
+     resultado.total_servicos_gerais, resultado.total_imposto,
+     resultado.total_geral, orcamentoId]
   );
 
   return resultado;
@@ -151,6 +197,9 @@ const recalcularOrcamento = async (conn, orcamentoId) => {
  * passando do valor cheio — desconto maior que o item zeraria a linha, não a deixaria
  * negativa.
  */
+/** Preço unitário já com o imposto embutido. Compartilhado com o PDF. */
+const precoComImposto = (preco, fator) => round2(num(preco) * fator);
+
 const calcularDesconto = (base, tipo, desconto) => {
   const valorBase = round2(base);
   const d = num(desconto);
@@ -159,24 +208,31 @@ const calcularDesconto = (base, tipo, desconto) => {
   return round2(Math.min(bruto, valorBase));
 };
 
-const calcularProduto = (produto) => {
+const calcularProduto = (produto, fator = 1) => {
   const quantidade = num(produto.quantidade);
   const preco_unitario = num(produto.preco_unitario);
-  const total_bruto = round2(quantidade * preco_unitario);
+  // O imposto entra no unitário, não no fim: assim a linha do PDF fecha na conta
+  // que o cliente faz — quantidade × unitário − desconto = total.
+  const preco_cobrado = precoComImposto(preco_unitario, fator);
+  const total_bruto = round2(quantidade * preco_cobrado);
   const total_desconto = calcularDesconto(total_bruto, produto.desconto_tipo, produto.desconto);
 
   return {
     ...produto,
     quantidade,
     preco_unitario,
+    preco_cobrado,
     total_bruto,
     total_desconto,
     total_item: round2(total_bruto - total_desconto),
   };
 };
 
-const calcularOrcamentoVenda = ({ produtos = [], desconto_tipo = 'percentual', desconto = 0 }) => {
-  const itens = produtos.map(calcularProduto);
+const calcularOrcamentoVenda = ({
+  produtos = [], desconto_tipo = 'percentual', desconto = 0, imposto_percentual = 0,
+}) => {
+  const fator = fatorImposto(imposto_percentual);
+  const itens = produtos.map((p) => calcularProduto(p, fator));
 
   const total_produtos = round2(itens.reduce((acc, i) => acc + i.total_bruto, 0));
   const descontoItens = round2(itens.reduce((acc, i) => acc + i.total_desconto, 0));
@@ -184,6 +240,13 @@ const calcularOrcamentoVenda = ({ produtos = [], desconto_tipo = 'percentual', d
 
   // O desconto geral incide sobre o que sobrou depois dos descontos de linha.
   const descontoGeral = calcularDesconto(subtotal, desconto_tipo, desconto);
+  const total_geral = round2(subtotal - descontoGeral);
+
+  // Mesma ideia do orçamento de impressão: a conta refeita sem imposto é o que diz,
+  // ao centavo, quanto dele é imposto.
+  const semImposto = fator === 1
+    ? null
+    : calcularOrcamentoVenda({ produtos, desconto_tipo, desconto });
 
   return {
     produtos: itens,
@@ -192,14 +255,16 @@ const calcularOrcamentoVenda = ({ produtos = [], desconto_tipo = 'percentual', d
     desconto_geral: descontoGeral,
     total_descontos: round2(descontoItens + descontoGeral),
     subtotal,
-    total_geral: round2(subtotal - descontoGeral),
+    imposto_percentual: num(imposto_percentual),
+    total_imposto: semImposto ? round2(total_geral - semImposto.total_geral) : 0,
+    total_geral,
   };
 };
 
 /** Mesma ideia de recalcularOrcamento, para o orçamento de venda. */
 const recalcularOrcamentoVenda = async (conn, orcamentoId) => {
   const [[orcamento]] = await conn.query(
-    'SELECT id, desconto_tipo, desconto FROM orcamentos WHERE id = ?',
+    'SELECT id, desconto_tipo, desconto, imposto_percentual FROM orcamentos WHERE id = ?',
     [orcamentoId]
   );
   if (!orcamento) throw new Error(`Orçamento ${orcamentoId} não encontrado`);
@@ -213,6 +278,7 @@ const recalcularOrcamentoVenda = async (conn, orcamentoId) => {
     produtos,
     desconto_tipo: orcamento.desconto_tipo,
     desconto: orcamento.desconto,
+    imposto_percentual: orcamento.imposto_percentual,
   });
 
   for (const item of resultado.produtos) {
@@ -226,15 +292,17 @@ const recalcularOrcamentoVenda = async (conn, orcamentoId) => {
 
   await conn.query(
     `UPDATE orcamentos
-        SET total_produtos = ?, total_descontos = ?, total_geral = ?
+        SET total_produtos = ?, total_descontos = ?, total_imposto = ?, total_geral = ?
       WHERE id = ?`,
-    [resultado.total_produtos, resultado.total_descontos, resultado.total_geral, orcamentoId]
+    [resultado.total_produtos, resultado.total_descontos,
+     resultado.total_imposto, resultado.total_geral, orcamentoId]
   );
 
   return resultado;
 };
 
 module.exports = {
-  round2, calcularServico, calcularItem, calcularOrcamento, recalcularOrcamento,
+  round2, fatorImposto, precoComImposto, impostoDoOrcamento, validarImposto,
+  calcularServico, calcularItem, calcularOrcamento, recalcularOrcamento,
   calcularDesconto, calcularProduto, calcularOrcamentoVenda, recalcularOrcamentoVenda,
 };

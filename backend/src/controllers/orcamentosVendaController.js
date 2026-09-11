@@ -1,5 +1,7 @@
 const db = require('../utils/db');
-const { recalcularOrcamentoVenda } = require('../utils/calculoOrcamento');
+const {
+  recalcularOrcamentoVenda, impostoDoOrcamento, validarImposto,
+} = require('../utils/calculoOrcamento');
 const { proximoNumero, registrarHistorico } = require('../utils/documentos');
 
 const TIPOS_DESCONTO = ['percentual', 'valor'];
@@ -15,8 +17,10 @@ const validarDesconto = (tipo, valor, onde) => {
   return null;
 };
 
-const validarPayload = ({ cliente_id, produtos, desconto_tipo, desconto }) => {
+const validarPayload = ({ cliente_id, produtos, desconto_tipo, desconto, imposto_percentual }) => {
   if (!cliente_id) return 'Selecione o cliente';
+  const erroImposto = validarImposto(imposto_percentual);
+  if (erroImposto) return erroImposto;
   if (!Array.isArray(produtos) || produtos.length === 0) return 'Inclua ao menos um produto no orçamento';
 
   for (const [i, p] of produtos.entries()) {
@@ -97,30 +101,39 @@ const gravarProdutos = async (conn, orcamentoId, produtos) => {
 
 // ─── Criação e edição ───────────────────────────────────────────────────────
 const criar = async (req, res) => {
-  const { cliente_id, observacao, produtos, desconto_tipo = 'percentual', desconto = 0 } = req.body;
+  const {
+    cliente_id, observacao, produtos, desconto_tipo = 'percentual', desconto = 0,
+    imposto_percentual,
+  } = req.body;
 
-  const erroValidacao = validarPayload({ cliente_id, produtos, desconto_tipo, desconto });
+  const erroValidacao = validarPayload({
+    cliente_id, produtos, desconto_tipo, desconto, imposto_percentual,
+  });
   if (erroValidacao) return res.status(400).json({ erro: erroValidacao });
 
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
 
-    const [cliente] = await conn.query('SELECT id FROM clientes WHERE id = ?', [cliente_id]);
+    const [cliente] = await conn.query(
+      'SELECT id, imposto_percentual FROM clientes WHERE id = ?', [cliente_id]
+    );
     if (cliente.length === 0) {
       await conn.rollback();
       return res.status(404).json({ erro: 'Cliente não encontrado' });
     }
 
+    const imposto = impostoDoOrcamento(imposto_percentual, cliente[0].imposto_percentual);
     const numeroOrcamento = await proximoNumero(conn, 'orcamento_venda');
 
     const [result] = await conn.query(
       `INSERT INTO orcamentos
-         (tipo, numero_orcamento, cliente_id, observacao, desconto_tipo, desconto, status, criado_por)
-       VALUES ('produto', ?, ?, ?, ?, ?, 'rascunho', ?)`,
+         (tipo, numero_orcamento, cliente_id, observacao, desconto_tipo, desconto,
+          imposto_percentual, status, criado_por)
+       VALUES ('produto', ?, ?, ?, ?, ?, ?, 'rascunho', ?)`,
       [numeroOrcamento, cliente_id, observacao?.trim() || null,
        TIPOS_DESCONTO.includes(desconto_tipo) ? desconto_tipo : 'percentual',
-       parseFloat(desconto) || 0, req.usuario.id]
+       parseFloat(desconto) || 0, imposto, req.usuario.id]
     );
     const orcamentoId = result.insertId;
 
@@ -156,9 +169,14 @@ const criar = async (req, res) => {
 };
 
 const atualizar = async (req, res) => {
-  const { cliente_id, observacao, produtos, desconto_tipo = 'percentual', desconto = 0 } = req.body;
+  const {
+    cliente_id, observacao, produtos, desconto_tipo = 'percentual', desconto = 0,
+    imposto_percentual,
+  } = req.body;
 
-  const erroValidacao = validarPayload({ cliente_id, produtos, desconto_tipo, desconto });
+  const erroValidacao = validarPayload({
+    cliente_id, produtos, desconto_tipo, desconto, imposto_percentual,
+  });
   if (erroValidacao) return res.status(400).json({ erro: erroValidacao });
 
   const conn = await db.getConnection();
@@ -166,7 +184,8 @@ const atualizar = async (req, res) => {
     await conn.beginTransaction();
 
     const [[orcamento]] = await conn.query(
-      'SELECT id, tipo, total_geral FROM orcamentos WHERE id = ? FOR UPDATE',
+      `SELECT id, tipo, total_geral, imposto_percentual
+         FROM orcamentos WHERE id = ? FOR UPDATE`,
       [req.params.id]
     );
     if (!orcamento) {
@@ -185,10 +204,14 @@ const atualizar = async (req, res) => {
     }
 
     await conn.query(
-      'UPDATE orcamentos SET cliente_id = ?, observacao = ?, desconto_tipo = ?, desconto = ? WHERE id = ?',
+      `UPDATE orcamentos
+          SET cliente_id = ?, observacao = ?, desconto_tipo = ?, desconto = ?,
+              imposto_percentual = ?
+        WHERE id = ?`,
       [cliente_id, observacao?.trim() || null,
        TIPOS_DESCONTO.includes(desconto_tipo) ? desconto_tipo : 'percentual',
-       parseFloat(desconto) || 0, orcamento.id]
+       parseFloat(desconto) || 0,
+       impostoDoOrcamento(imposto_percentual, orcamento.imposto_percentual), orcamento.id]
     );
 
     const { erro } = await gravarProdutos(conn, orcamento.id, produtos);
@@ -225,7 +248,8 @@ const reprecificar = async (req, res) => {
     await conn.beginTransaction();
 
     const [[orcamento]] = await conn.query(
-      'SELECT id, tipo, total_geral FROM orcamentos WHERE id = ? FOR UPDATE',
+      `SELECT id, tipo, cliente_id, total_geral
+         FROM orcamentos WHERE id = ? FOR UPDATE`,
       [req.params.id]
     );
     if (!orcamento) {
@@ -236,6 +260,14 @@ const reprecificar = async (req, res) => {
       await conn.rollback();
       return res.status(400).json({ erro: 'Este é um orçamento de impressão' });
     }
+
+    const [[cliente]] = await conn.query(
+      'SELECT imposto_percentual FROM clientes WHERE id = ?', [orcamento.cliente_id]
+    );
+    await conn.query(
+      'UPDATE orcamentos SET imposto_percentual = ? WHERE id = ?',
+      [impostoDoOrcamento(undefined, cliente?.imposto_percentual), orcamento.id]
+    );
 
     // Itens avulsos (sem produto_id) não têm cadastro de onde puxar preço.
     await conn.query(`

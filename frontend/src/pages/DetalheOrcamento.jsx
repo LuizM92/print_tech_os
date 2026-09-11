@@ -25,6 +25,9 @@ export default function DetalheOrcamento() {
   const [carregando, setCarregando] = useState(true);
   const [pdfCarregando, setPdfCarregando] = useState(false);
   const [confirmacao, setConfirmacao] = useState(null);
+  // A NF é emitida em outra plataforma; aqui é só registro — número, data e o anexo.
+  const [nf, setNf] = useState({ numero: '', emitida_em: '', observacao: '', arquivo: null });
+  const [nfSalvando, setNfSalvando] = useState(false);
 
   const carregar = useCallback(async () => {
     try {
@@ -39,6 +42,17 @@ export default function DetalheOrcamento() {
   }, [id, navigate]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  useEffect(() => {
+    if (!orc?.nota_fiscal) return;
+    setNf({
+      numero: orc.nota_fiscal.numero || '',
+      emitida_em: orc.nota_fiscal.emitida_em
+        ? String(orc.nota_fiscal.emitida_em).slice(0, 10) : '',
+      observacao: orc.nota_fiscal.observacao || '',
+      arquivo: null,
+    });
+  }, [orc?.nota_fiscal]);
 
   // Os dois tipos compartilham esta tela; o que muda são os itens, os rótulos e a
   // rota de edição. Venda fala em Pedido; impressão fala em Ordem de Serviço.
@@ -56,7 +70,7 @@ export default function DetalheOrcamento() {
       rotaLista: '/vendas',
       rotaReprecificar: `/orcamentos-venda/${id}/reprecificar`,
       avisoNaoAprovado: 'O Pedido de Venda, com número próprio, é gerado quando você aprovar.',
-      textoReprecificar: 'traz o preço dos produtos para os valores atuais do catálogo.',
+      textoReprecificar: 'traz o preço dos produtos e o imposto para o cadastro atual.',
     }
     : {
       aprovado: 'Ordem de Serviço',
@@ -67,7 +81,7 @@ export default function DetalheOrcamento() {
       rotaLista: '/orcamentos',
       rotaReprecificar: `/orcamentos/${id}/reprecificar`,
       avisoNaoAprovado: 'A Ordem de Serviço, com número próprio, é gerada quando você aprovar.',
-      textoReprecificar: 'traz o material, os serviços e a hora-máquina para a tabela atual.',
+      textoReprecificar: 'traz o material, os serviços, a hora-máquina e o imposto para o cadastro atual.',
     };
 
   const alterarStatus = async (status) => {
@@ -107,6 +121,54 @@ export default function DetalheOrcamento() {
       navigate(textos.rotaLista);
     } catch (err) {
       toast.error(err.response?.data?.erro || 'Erro ao excluir');
+    }
+  };
+
+  const salvarNotaFiscal = async (e) => {
+    e.preventDefault();
+    if (!nf.numero.trim()) return toast.error('Informe o número da nota fiscal');
+
+    setNfSalvando(true);
+    try {
+      // multipart porque o anexo vai junto; sem arquivo o que já estava lá continua.
+      const corpo = new FormData();
+      corpo.append('numero', nf.numero.trim());
+      corpo.append('emitida_em', nf.emitida_em);
+      corpo.append('observacao', nf.observacao);
+      if (nf.arquivo) corpo.append('arquivo', nf.arquivo);
+
+      const { data } = await api.post(`/orcamentos/${id}/nota-fiscal`, corpo);
+      toast.success(data.mensagem);
+      carregar();
+    } catch (err) {
+      toast.error(err.response?.data?.erro || 'Erro ao salvar a nota fiscal');
+    } finally {
+      setNfSalvando(false);
+    }
+  };
+
+  const baixarAnexoNota = async () => {
+    try {
+      const res = await api.get(`/orcamentos/${id}/nota-fiscal/arquivo`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = orc.nota_fiscal?.arquivo_nome || 'nota-fiscal';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Erro ao baixar o anexo');
+    }
+  };
+
+  const removerNotaFiscal = async () => {
+    try {
+      await api.delete(`/orcamentos/${id}/nota-fiscal`);
+      toast.success('Nota fiscal removida');
+      setNf({ numero: '', emitida_em: '', observacao: '', arquivo: null });
+      carregar();
+    } catch (err) {
+      toast.error(err.response?.data?.erro || 'Erro ao remover a nota fiscal');
     }
   };
 
@@ -300,6 +362,13 @@ export default function DetalheOrcamento() {
                 {fmtNum(item.peso_gramas)}g × R${fmtNum(item.custo_por_grama, 4)} = {fmtMoeda(item.custo_material)}
                 {'   +   '}
                 {fmtNum(item.horas_impressao)}h × {fmtMoeda(orc.valor_hora_maquina)} = {fmtMoeda(item.custo_impressao)}
+                {/* Sem este passo o unitário pareceria não bater com o custo acima. */}
+                {parseFloat(orc.imposto_percentual) > 0 && (
+                  <>
+                    {'   +   '}
+                    imposto {parseFloat(orc.imposto_percentual)}% = {fmtMoeda(item.valor_por_peca)}
+                  </>
+                )}
               </div>
 
               {item.servicos.length > 0 && (
@@ -396,6 +465,61 @@ export default function DetalheOrcamento() {
               </>
             )}
 
+            <h3 style={tituloCard}>Nota fiscal</h3>
+            <form onSubmit={salvarNotaFiscal} style={{ marginBottom: 16 }}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Número</label>
+                  <input
+                    value={nf.numero}
+                    onChange={(e) => setNf((p) => ({ ...p, numero: e.target.value }))}
+                    placeholder="Número da NF emitida"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Emitida em</label>
+                  <input
+                    type="date"
+                    value={nf.emitida_em}
+                    onChange={(e) => setNf((p) => ({ ...p, emitida_em: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Anexo (PDF, PNG ou JPEG — até 8 MB)</label>
+                <input
+                  type="file"
+                  accept="application/pdf,image/png,image/jpeg"
+                  onChange={(e) => setNf((p) => ({ ...p, arquivo: e.target.files[0] || null }))}
+                />
+                {orc.nota_fiscal?.arquivo_nome && !nf.arquivo && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                    Anexo atual:{' '}
+                    <button type="button" className="link-button" onClick={baixarAnexoNota}>
+                      {orc.nota_fiscal.arquivo_nome}
+                    </button>
+                    {' '}· enviar um novo substitui este
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={nfSalvando}>
+                  {nfSalvando ? 'Salvando...' : (orc.nota_fiscal ? 'Atualizar NF' : 'Registrar NF')}
+                </button>
+                {orc.nota_fiscal && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setConfirmacao('nota')}
+                  >
+                    Remover NF
+                  </button>
+                )}
+              </div>
+            </form>
+
             <h3 style={tituloCard}>Outras ações</h3>
             <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
               <button className="btn btn-ghost btn-sm" onClick={() => setConfirmacao('reprecificar')}>
@@ -408,7 +532,8 @@ export default function DetalheOrcamento() {
               )}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10, lineHeight: 1.6 }}>
-              Os preços deste orçamento estão congelados nos valores de quando foi feito.
+              Os preços deste orçamento, o imposto incluído, estão congelados nos valores
+              de quando foi feito.
               "Atualizar preços" {textos.textoReprecificar}
             </div>
           </div>
@@ -447,6 +572,15 @@ export default function DetalheOrcamento() {
                     </div>
                   )}
                 </>
+              )}
+              {parseFloat(orc.total_imposto) > 0 && (
+                <div className="os-summary-row" style={{ color: 'var(--text-muted)' }}>
+                  <span>
+                    Imposto embutido ({parseFloat(orc.imposto_percentual)}%)
+                    <span style={{ fontSize: 10, marginLeft: 6 }}>não sai no PDF</span>
+                  </span>
+                  <span>{fmtMoeda(orc.total_imposto)}</span>
+                </div>
               )}
               <div className="os-summary-row total">
                 <span>TOTAL GERAL</span>
@@ -504,7 +638,14 @@ export default function DetalheOrcamento() {
         onClose={() => setConfirmacao(null)}
         onConfirm={() => { setConfirmacao(null); reprecificar(); }}
         title="Atualizar preços?"
-        message="Os custos de material, serviços e hora-máquina serão trazidos para os valores atuais do cadastro. O total do orçamento pode mudar."
+        message="Os custos de material, serviços, hora-máquina e o imposto do cliente serão trazidos para os valores atuais do cadastro. O total do orçamento pode mudar."
+      />
+      <ConfirmModal
+        isOpen={confirmacao === 'nota'}
+        onClose={() => setConfirmacao(null)}
+        onConfirm={() => { setConfirmacao(null); removerNotaFiscal(); }}
+        title="Remover nota fiscal?"
+        message={`O registro da NF ${orc.nota_fiscal?.numero || ''} e o anexo saem deste orçamento. A nota emitida na outra plataforma não é afetada.`}
       />
       <ConfirmModal
         isOpen={confirmacao === 'excluir'}

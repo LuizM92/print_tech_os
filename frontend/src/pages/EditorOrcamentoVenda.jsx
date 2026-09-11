@@ -41,6 +41,7 @@ export default function EditorOrcamentoVenda() {
   const [catalogo, setCatalogo] = useState([]);
   const [form, setForm] = useState({
     cliente_id: '', observacao: '', desconto_tipo: 'percentual', desconto: '',
+    imposto_percentual: '',
   });
   const [linhas, setLinhas] = useState([linhaVazia()]);
 
@@ -68,6 +69,8 @@ export default function EditorOrcamentoVenda() {
             observacao: data.observacao || '',
             desconto_tipo: data.desconto_tipo,
             desconto: parseFloat(data.desconto) > 0 ? String(parseFloat(data.desconto)) : '',
+            imposto_percentual: parseFloat(data.imposto_percentual) > 0
+              ? String(parseFloat(data.imposto_percentual)) : '',
           });
           setStatusOrcamento(data.status);
           setNumeroOrcamento(data.numero_orcamento);
@@ -92,13 +95,28 @@ export default function EditorOrcamentoVenda() {
     carregar();
   }, [id, editando, navigate]);
 
+  // O imposto do cliente entra como sugestão no orçamento novo; depois quem manda
+  // é o campo, que pode ser zerado para este orçamento específico.
+  const clienteSelecionado = clientes.find((c) => String(c.id) === String(form.cliente_id));
+  const impostoDoCliente = clienteSelecionado?.imposto_percentual;
+
+  useEffect(() => {
+    if (editando) return;
+    setForm((p) => ({
+      ...p,
+      imposto_percentual: parseFloat(impostoDoCliente) > 0
+        ? String(parseFloat(impostoDoCliente)) : '',
+    }));
+  }, [editando, impostoDoCliente]);
+
   const calculo = useMemo(
     () => calcularOrcamentoVenda({
       produtos: linhas,
       desconto_tipo: form.desconto_tipo,
       desconto: form.desconto,
+      imposto_percentual: form.imposto_percentual,
     }),
-    [linhas, form.desconto_tipo, form.desconto]
+    [linhas, form.desconto_tipo, form.desconto, form.imposto_percentual]
   );
 
   const atualizarLinha = (chave, campos) =>
@@ -148,6 +166,7 @@ export default function EditorOrcamentoVenda() {
       observacao: form.observacao,
       desconto_tipo: form.desconto_tipo,
       desconto: parseFloat(form.desconto) || 0,
+      imposto_percentual: parseFloat(form.imposto_percentual) || 0,
       produtos: linhas.map((l) => ({
         produto_id: l.produto_id ? parseInt(l.produto_id, 10) : null,
         descricao: l.descricao,
@@ -211,6 +230,25 @@ export default function EditorOrcamentoVenda() {
                   valor={form.cliente_id}
                   onChange={(id) => setForm((p) => ({ ...p, cliente_id: id }))}
                 />
+
+                {/* Controle interno: entra no preço e não aparece no PDF. */}
+                <div className="form-group" style={{ marginTop: 14, maxWidth: 220 }}>
+                  <label>Imposto (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={form.imposto_percentual}
+                    onChange={(e) => setForm((p) => ({ ...p, imposto_percentual: e.target.value }))}
+                    placeholder="Sem imposto"
+                  />
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                    {calculo.total_imposto > 0
+                      ? `${fmtMoeda(calculo.total_imposto)} embutidos no preço — não aparece no PDF`
+                      : 'Não aparece no PDF; entra embutido no preço das linhas'}
+                  </div>
+                </div>
               </div>
 
               {/* Produtos */}
@@ -278,6 +316,13 @@ export default function EditorOrcamentoVenda() {
                       <span className="text-danger">- {fmtMoeda(calculo.desconto_geral)}</span>
                     </div>
                   )}
+                  {calculo.total_imposto > 0 && (
+                    <div className="os-summary-row" style={{ color: 'var(--text-muted)' }}>
+                      <span>Imposto embutido ({parseFloat(form.imposto_percentual)}%)</span>
+                      <span>{fmtMoeda(calculo.total_imposto)}</span>
+                    </div>
+                  )}
+
                   <div className="os-summary-row total">
                     <span>TOTAL GERAL</span>
                     <span>{fmtMoeda(calculo.total_geral)}</span>
