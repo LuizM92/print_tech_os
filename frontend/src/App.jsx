@@ -2,7 +2,9 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { SidebarProvider, useSidebar } from './contexts/SidebarContext';
 import Sidebar from './components/shared/Sidebar';
+import BarraMobile from './components/shared/BarraMobile';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Clientes from './pages/Clientes';
@@ -29,10 +31,18 @@ function PrivateRoute({ children, adminOnly = false }) {
 }
 
 function AppLayout({ children }) {
+  const { recolhida, menuMobileAberto, fecharMenuMobile } = useSidebar();
+  // A largura do menu é uma variável CSS trocada por classe: o conteúdo acompanha sem JS.
+  const classes = ['app-layout', recolhida && 'sidebar-recolhida', menuMobileAberto && 'menu-mobile-aberto']
+    .filter(Boolean).join(' ');
   return (
-    <div className="app-layout">
+    <div className={classes}>
       <Sidebar />
-      <main className="main-content">{children}</main>
+      <div className="sidebar-backdrop" onClick={fecharMenuMobile} aria-hidden="true" />
+      <main className="main-content">
+        <BarraMobile />
+        {children}
+      </main>
     </div>
   );
 }
@@ -71,7 +81,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <SidebarProvider>
+          <AppRoutes />
+        </SidebarProvider>
         <Toaster
           position="top-right"
           toastOptions={{

@@ -185,9 +185,9 @@ A mesma etapa aparece (e pode ser mudada) na tela de detalhe da OS, no card de s
 
 ## Módulo de fabricação
 
-A tela **Fabricação → Produtos** é o cadastro do que a gente **fabrica** — diferente da
-tela **Produtos** de Cadastros, que é a mercadoria comprada para revender nos orçamentos
-de venda. Aqui vale o padrão de SKU descrito em [PADRAO-SKU.md](PADRAO-SKU.md):
+A tela **Fabricação** (no menu, em Oficina) é o cadastro do que a gente **fabrica** —
+diferente da tela **Produtos** de Cadastros, que é a mercadoria comprada para revender
+nos orçamentos de venda. Aqui vale o padrão de SKU descrito em [PADRAO-SKU.md](PADRAO-SKU.md):
 
 ```
 SKU pai       CAT-MODELO                 VAS-PACMAN
@@ -342,6 +342,30 @@ dashboard inteiro por ele.
 Entrada inválida em qualquer filtro é ignorada em silêncio — filtro é conveniência de
 tela e não deve derrubar a página. Todos os valores entram na consulta como parâmetro;
 nada do que o usuário digita vira texto de SQL.
+
+---
+
+## Menu lateral
+
+O menu é dividido em grupos que seguem a ordem do negócio:
+
+| Grupo | Telas |
+|---|---|
+| — | Dashboard |
+| **Comercial** | Orçamentos, Vendas, Clientes |
+| **Oficina** | Produção (fila das OS), Fabricação (catálogo de SKU próprio) |
+| **Cadastros** | Produtos (revenda), Materiais, Serviços |
+| **Administração** | Usuários (só admin), Configurações |
+
+- Cada grupo **abre e fecha** pelo cabeçalho. Entrar numa tela abre o grupo dela; fechar
+  depois é escolha sua, e um ponto no cabeçalho marca onde você está.
+- A alça na borda do menu (ou `Ctrl+B`) **recolhe o menu em ícones** — o rótulo aparece
+  ao passar o mouse. Útil no quadro de produção e nos editores, que pedem largura.
+- Em telas estreitas (celular, tablet em pé) o menu vira uma **gaveta**, aberta pelo
+  botão no topo e fechada ao tocar fora, no `×`, no `Esc` ou ao trocar de tela.
+
+Essas preferências ficam no navegador (`localStorage`), por máquina — não vão para o
+servidor nem seguem o usuário.
 
 ---
 

@@ -1,108 +1,200 @@
-import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSidebar } from '../../contexts/SidebarContext';
+import usePersistido from '../../hooks/usePersistido';
+import Icon from './Icon';
 
-const Icon = ({ name }) => {
-  const icons = {
-    dashboard: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />,
-    clients: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />,
-    budget: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />,
-    materials: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />,
-    services: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />,
-    users: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />,
-    settings: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />,
-    vendas: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />,
-    produtos: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />,
-    fabricacao: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 20h10M7 20a2 2 0 01-2-2V9l5 3V9l5 3V9l4 2.5V18a2 2 0 01-2 2M7 20V9M5 9l1-5h3l1 5" />,
-    producao: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 12h10M4 18h7M17 15l3 3-3 3" />,
-    logout: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />,
-  };
-  return (
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width:16,height:16}}>
-      {icons[name]}
-    </svg>
-  );
-};
+// O Dashboard fica solto no topo: é a porta de entrada, não pertence a grupo nenhum.
+const INICIO = { to: '/dashboard', icone: 'dashboard', rotulo: 'Dashboard' };
+
+// Os grupos seguem a ordem do negócio: vender → fabricar → manter os cadastros → administrar.
+const GRUPOS = [
+  {
+    id: 'comercial',
+    titulo: 'Comercial',
+    itens: [
+      { to: '/orcamentos', icone: 'budget', rotulo: 'Orçamentos' },
+      { to: '/vendas', icone: 'vendas', rotulo: 'Vendas' },
+      { to: '/clientes', icone: 'clients', rotulo: 'Clientes' },
+    ],
+  },
+  {
+    id: 'oficina',
+    titulo: 'Oficina',
+    itens: [
+      { to: '/producao', icone: 'producao', rotulo: 'Produção' },
+      // Catálogo do que a gente fabrica (SKU pai e variações). O rótulo não repete
+      // "Produtos" para não confundir com a mercadoria de revenda, em Cadastros.
+      { to: '/fabricacao/produtos', icone: 'fabricacao', rotulo: 'Fabricação' },
+    ],
+  },
+  {
+    id: 'cadastros',
+    titulo: 'Cadastros',
+    itens: [
+      { to: '/produtos', icone: 'produtos', rotulo: 'Produtos' },
+      { to: '/materiais', icone: 'materials', rotulo: 'Materiais' },
+      { to: '/servicos', icone: 'services', rotulo: 'Serviços' },
+    ],
+  },
+  {
+    id: 'admin',
+    titulo: 'Administração',
+    itens: [
+      { to: '/usuarios', icone: 'users', rotulo: 'Usuários', somenteAdmin: true },
+      { to: '/configuracoes', icone: 'settings', rotulo: 'Configurações' },
+    ],
+  },
+];
+
+/** Mesmo critério do NavLink: a rota e tudo que está abaixo dela (/orcamentos/novo, /orcamentos/12). */
+const rotaAtiva = (pathname, to) => pathname === to || pathname.startsWith(`${to}/`);
+
+const classeItem = ({ isActive }) => `nav-item ${isActive ? 'active' : ''}`;
 
 export default function Sidebar() {
   const { usuario, logout, isAdmin } = useAuth();
+  const { recolhida, menuMobileAberto, alternarRecolhida, fecharMenuMobile } = useSidebar();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
+  // Só guarda o que o usuário fechou; grupo novo já nasce aberto.
+  const [gruposFechados, setGruposFechados] = usePersistido('pt.menu.gruposFechados', {});
+  const [dica, setDica] = useState(null);
+
+  const admin = isAdmin();
+  const grupos = GRUPOS
+    .map((g) => ({ ...g, itens: g.itens.filter((i) => !i.somenteAdmin || admin) }))
+    .filter((g) => g.itens.length > 0);
+
+  const grupoDaRota = GRUPOS.find((g) => g.itens.some((i) => rotaAtiva(pathname, i.to)))?.id;
+
+  // Entrar numa tela abre o grupo dela: o item ativo nunca fica escondido atrás de um
+  // grupo fechado. Fechar de novo depois disso é escolha do usuário e é respeitado.
+  useEffect(() => {
+    if (!grupoDaRota) return;
+    setGruposFechados((f) => (f[grupoDaRota] ? { ...f, [grupoDaRota]: false } : f));
+  }, [grupoDaRota, setGruposFechados]);
+
+  // Trocar de tela fecha a gaveta do celular; Esc também.
+  useEffect(() => { fecharMenuMobile(); }, [pathname, fecharMenuMobile]);
+  useEffect(() => {
+    if (!menuMobileAberto) return undefined;
+    const aoTeclar = (e) => { if (e.key === 'Escape') fecharMenuMobile(); };
+    window.addEventListener('keydown', aoTeclar);
+    return () => window.removeEventListener('keydown', aoTeclar);
+  }, [menuMobileAberto, fecharMenuMobile]);
+
+  // Recolhido, o rótulo some e vira uma dica ao lado do ícone. A dica é renderizada
+  // fora do <aside> com posição fixa, para escapar do overflow da lista.
+  useEffect(() => { if (!recolhida) setDica(null); }, [recolhida]);
+  const comDica = (texto) => {
+    if (!recolhida) return {};
+    const mostrar = (e) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      setDica({ texto, top: r.top + r.height / 2 });
+    };
+    const esconder = () => setDica(null);
+    return { onMouseEnter: mostrar, onMouseLeave: esconder, onFocus: mostrar, onBlur: esconder };
+  };
+
+  const alternarGrupo = (id) => setGruposFechados((f) => ({ ...f, [id]: !f[id] }));
   const handleLogout = () => { logout(); navigate('/login'); };
-  const initials = usuario?.nome?.split(' ').map(n => n[0]).slice(0, 2).join('') || 'U';
+
+  const iniciais = usuario?.nome?.split(' ').map((n) => n[0]).slice(0, 2).join('') || 'U';
+  const primeiroNome = usuario?.nome?.split(' ')[0];
+  const rotuloAlternar = recolhida ? 'Expandir menu (Ctrl+B)' : 'Recolher menu (Ctrl+B)';
+
+  const renderItem = (item) => (
+    <NavLink key={item.to} to={item.to} className={classeItem} aria-label={item.rotulo} {...comDica(item.rotulo)}>
+      <Icon name={item.icone} />
+      <span className="nav-item-texto">{item.rotulo}</span>
+    </NavLink>
+  );
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-logo">
-        <h1>Print<span style={{color:'var(--accent)'}}>Tech</span></h1>
-        <span>v1.0.0</span>
-      </div>
-
-      <nav className="sidebar-nav">
-        <div className="nav-section">
-          <div className="nav-section-title">Principal</div>
-          <NavLink to="/dashboard" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Icon name="dashboard" /> Dashboard
-          </NavLink>
-          <NavLink to="/orcamentos" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Icon name="budget" /> Orçamentos
-          </NavLink>
-          <NavLink to="/vendas" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Icon name="vendas" /> Vendas
-          </NavLink>
-          <NavLink to="/producao" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Icon name="producao" /> Produção
-          </NavLink>
-          <NavLink to="/clientes" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Icon name="clients" /> Clientes
-          </NavLink>
+    <>
+      <aside
+        className={`sidebar ${recolhida ? 'recolhida' : ''} ${menuMobileAberto ? 'aberta' : ''}`}
+        aria-label="Menu principal"
+      >
+        <div className="sidebar-logo">
+          <h1 className="sidebar-marca">
+            {recolhida ? <>P<span>T</span></> : <>Print<span>Tech</span></>}
+          </h1>
+          <span className="sidebar-versao">v1.0.0</span>
+          <button type="button" className="btn-icon sidebar-fechar" onClick={fecharMenuMobile} aria-label="Fechar menu">
+            <Icon name="fechar" />
+          </button>
         </div>
 
-        <div className="nav-section">
-          <div className="nav-section-title">Fabricação</div>
-          <NavLink to="/fabricacao/produtos" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Icon name="fabricacao" /> Produtos
-          </NavLink>
-        </div>
+        <button
+          type="button"
+          className="sidebar-alternar"
+          onClick={alternarRecolhida}
+          aria-expanded={!recolhida}
+          aria-label={rotuloAlternar}
+          title={recolhida ? undefined : rotuloAlternar}
+          {...comDica(rotuloAlternar)}
+        >
+          <Icon name="recolher" />
+        </button>
 
-        <div className="nav-section">
-          <div className="nav-section-title">Cadastros</div>
-          <NavLink to="/produtos" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Icon name="produtos" /> Produtos
-          </NavLink>
-          <NavLink to="/materiais" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Icon name="materials" /> Materiais
-          </NavLink>
-          <NavLink to="/servicos" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Icon name="services" /> Serviços
-          </NavLink>
-        </div>
+        <nav className="sidebar-nav" onScroll={() => setDica(null)}>
+          <div className="nav-section">{renderItem(INICIO)}</div>
 
-        <div className="nav-section">
-          <div className="nav-section-title">Administração</div>
-          {isAdmin() && (
-            <NavLink to="/usuarios" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Icon name="users" /> Usuários
-            </NavLink>
-          )}
-          <NavLink to="/configuracoes" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Icon name="settings" /> Configurações
-          </NavLink>
-        </div>
-      </nav>
+          {grupos.map((grupo) => {
+            // Recolhido em ícones não há cabeçalho para clicar, então todo grupo aparece aberto.
+            const fechado = !!gruposFechados[grupo.id] && !recolhida;
+            const idItens = `nav-grupo-${grupo.id}`;
+            return (
+              <div key={grupo.id} className={`nav-grupo ${fechado ? 'fechado' : ''}`}>
+                <button
+                  type="button"
+                  className="nav-grupo-cabecalho"
+                  onClick={() => alternarGrupo(grupo.id)}
+                  aria-expanded={!fechado}
+                  aria-controls={idItens}
+                  tabIndex={recolhida ? -1 : 0}
+                >
+                  <span className="nav-grupo-titulo">{grupo.titulo}</span>
+                  {/* Grupo fechado com a tela atual dentro: um ponto mostra onde você está. */}
+                  {fechado && grupo.id === grupoDaRota && <span className="nav-grupo-ponto" aria-hidden="true" />}
+                  <Icon name="chevron" />
+                </button>
+                <div id={idItens} className="nav-grupo-itens">
+                  <div>{grupo.itens.map(renderItem)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </nav>
 
-      <div className="sidebar-footer">
-        <div className="user-info" onClick={handleLogout} title="Clique para sair">
-          <div className="user-avatar">{initials}</div>
-          <div>
-            <div className="user-name">{usuario?.nome?.split(' ')[0]}</div>
-            <div className="user-role">{usuario?.perfil}</div>
+        <div className="sidebar-footer">
+          <div className="user-info">
+            <div className="user-avatar" {...comDica(`${usuario?.nome} · ${usuario?.perfil}`)}>{iniciais}</div>
+            <div className="user-texto">
+              <div className="user-name">{primeiroNome}</div>
+              <div className="user-role">{usuario?.perfil}</div>
+            </div>
+            <button
+              type="button"
+              className="btn-icon user-sair"
+              onClick={handleLogout}
+              aria-label="Sair"
+              title={recolhida ? undefined : 'Sair'}
+              {...comDica('Sair')}
+            >
+              <Icon name="logout" />
+            </button>
           </div>
-          <div style={{marginLeft:'auto', color:'var(--text-muted)'}}>
-            <Icon name="logout" />
-          </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+
+      {recolhida && dica && (
+        <div className="sidebar-dica" role="tooltip" style={{ top: dica.top }}>{dica.texto}</div>
+      )}
+    </>
   );
 }
