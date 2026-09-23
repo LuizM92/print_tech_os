@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  fmtMoeda, fmtNum, fmtQtd, fmtData, fmtDataHora, badgeClass, rotuloStatus,
-  ETAPAS_PRODUCAO, rotuloEtapa,
+  fmtMoeda, fmtNum, fmtQtd, fmtData, fmtDataHora, fmtTamanho, badgeClass, rotuloStatus,
+  ETAPAS_PRODUCAO, rotuloEtapa, ACEITA_ARQUIVOS, ARQUIVOS_LISTA, ARQUIVOS_LIMITE_MB,
 } from '../utils/format';
 import { ConfirmModal } from '../components/shared/Modal';
 
@@ -28,6 +28,13 @@ export default function DetalheOrcamento() {
   // A NF é emitida em outra plataforma; aqui é só registro — número, data e o anexo.
   const [nf, setNf] = useState({ numero: '', emitida_em: '', observacao: '', arquivo: null });
   const [nfSalvando, setNfSalvando] = useState(false);
+  // Arquivos de modelo que o cliente já tinha prontos — vários por orçamento.
+  const [arquivosNovos, setArquivosNovos] = useState([]);
+  const [arquivosEnviando, setArquivosEnviando] = useState(false);
+  const [arquivoParaRemover, setArquivoParaRemover] = useState(null);
+  // O input de arquivo guarda a seleção sozinho; sem limpá-lo, o nome do que já subiu
+  // continuaria escrito no campo depois do envio.
+  const campoArquivos = useRef(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -169,6 +176,53 @@ export default function DetalheOrcamento() {
       carregar();
     } catch (err) {
       toast.error(err.response?.data?.erro || 'Erro ao remover a nota fiscal');
+    }
+  };
+
+  const enviarArquivos = async (e) => {
+    e.preventDefault();
+    if (arquivosNovos.length === 0) return;
+
+    setArquivosEnviando(true);
+    try {
+      const corpo = new FormData();
+      arquivosNovos.forEach((a) => corpo.append('arquivos', a));
+
+      const { data } = await api.post(`/orcamentos/${id}/arquivos`, corpo);
+      toast.success(data.mensagem);
+      setArquivosNovos([]);
+      if (campoArquivos.current) campoArquivos.current.value = '';
+      carregar();
+    } catch (err) {
+      toast.error(err.response?.data?.erro || 'Erro ao anexar os arquivos');
+    } finally {
+      setArquivosEnviando(false);
+    }
+  };
+
+  const baixarArquivo = async (arquivo) => {
+    try {
+      const res = await api.get(`/orcamentos/${id}/arquivos/${arquivo.id}`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = arquivo.nome;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Erro ao baixar o arquivo');
+    }
+  };
+
+  const removerArquivo = async (arquivo) => {
+    try {
+      await api.delete(`/orcamentos/${id}/arquivos/${arquivo.id}`);
+      toast.success('Arquivo removido');
+      carregar();
+    } catch (err) {
+      toast.error(err.response?.data?.erro || 'Erro ao remover o arquivo');
     }
   };
 
@@ -465,6 +519,68 @@ export default function DetalheOrcamento() {
               </>
             )}
 
+            {/* Tem cliente que já chega com a peça modelada. O arquivo dele fica
+                guardado aqui, junto do orçamento, em vez de no e-mail. */}
+            <h3 style={tituloCard}>Arquivos do cliente</h3>
+            {orc.arquivos?.length > 0 ? (
+              <div style={{ marginBottom: 12 }}>
+                {orc.arquivos.map((a) => (
+                  <div key={a.id} className="arquivo-linha">
+                    <span className="arquivo-ext">{a.extensao}</span>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <button
+                        type="button"
+                        className="link-button arquivo-nome"
+                        onClick={() => baixarArquivo(a)}
+                        title={`Baixar ${a.nome}`}
+                      >
+                        {a.nome}
+                      </button>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        {fmtTamanho(a.tamanho)} · {fmtData(a.criado_em)}
+                        {a.criado_por_nome && <> · {a.criado_por_nome}</>}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setArquivoParaRemover(a)}
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+                Nenhum arquivo anexado ainda.
+              </div>
+            )}
+
+            <form onSubmit={enviarArquivos} style={{ marginBottom: 16 }}>
+              <div className="form-group">
+                <label>Anexar {ARQUIVOS_LISTA} — até {ARQUIVOS_LIMITE_MB} MB cada</label>
+                <input
+                  type="file"
+                  multiple
+                  ref={campoArquivos}
+                  accept={ACEITA_ARQUIVOS}
+                  onChange={(e) => setArquivosNovos(Array.from(e.target.files))}
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn btn-primary btn-sm"
+                disabled={arquivosEnviando || arquivosNovos.length === 0}
+              >
+                {arquivosEnviando
+                  ? 'Enviando...'
+                  : (arquivosNovos.length > 1
+                    ? `Anexar ${arquivosNovos.length} arquivos`
+                    : 'Anexar arquivo')}
+              </button>
+            </form>
+
             <h3 style={tituloCard}>Nota fiscal</h3>
             <form onSubmit={salvarNotaFiscal} style={{ marginBottom: 16 }}>
               <div className="form-row">
@@ -646,6 +762,17 @@ export default function DetalheOrcamento() {
         onConfirm={() => { setConfirmacao(null); removerNotaFiscal(); }}
         title="Remover nota fiscal?"
         message={`O registro da NF ${orc.nota_fiscal?.numero || ''} e o anexo saem deste orçamento. A nota emitida na outra plataforma não é afetada.`}
+      />
+      <ConfirmModal
+        isOpen={!!arquivoParaRemover}
+        onClose={() => setArquivoParaRemover(null)}
+        onConfirm={() => {
+          const alvo = arquivoParaRemover;
+          setArquivoParaRemover(null);
+          removerArquivo(alvo);
+        }}
+        title="Remover arquivo?"
+        message={`${arquivoParaRemover?.nome || ''} sai deste orçamento. Se for a única cópia, peça o arquivo ao cliente de novo.`}
       />
       <ConfirmModal
         isOpen={confirmacao === 'excluir'}

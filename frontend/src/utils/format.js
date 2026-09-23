@@ -31,6 +31,23 @@ export const rotuloStatus = (status) =>
     cancelado: 'Cancelado',
   }[status] || status);
 
+// ─── Arquivos do cliente ────────────────────────────────────────────────────
+// Espelha backend/src/utils/arquivos3d.js — mudou lá, muda aqui.
+
+/** O que o campo de anexo aceita. Por extensão: .stl e .3mf não têm MIME próprio. */
+export const ACEITA_ARQUIVOS = '.zip,.stl,.step,.stp,.3mf,.obj';
+export const ARQUIVOS_LISTA = 'ZIP, STL, STEP, STP, 3MF ou OBJ';
+export const ARQUIVOS_LIMITE_MB = 25;
+
+/** Tamanho legível: 840 KB, 12,5 MB. Arquivo de impressão nunca é medido em bytes. */
+export const fmtTamanho = (bytes) => {
+  const n = parseInt(bytes, 10) || 0;
+  if (n < 1024) return `${n} B`;
+  const kb = n / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  return `${(kb / 1024).toFixed(1).replace('.', ',')} MB`;
+};
+
 // ─── Venda de produtos ──────────────────────────────────────────────────────
 
 /** Quantidade sem casas decimais inúteis: 4 un, 0,5 kg, 2,25 m. */

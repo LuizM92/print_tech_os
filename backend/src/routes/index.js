@@ -40,6 +40,30 @@ const receberNota = (req, res, next) => uploadNota(req, res, (err) => {
     : err.message;
   res.status(400).json({ erro: mensagem });
 });
+
+// Os arquivos de modelo do cliente também vão para o banco: leitura em memória.
+// O filtro olha a extensão, não o MIME — a razão está em utils/arquivos3d.js.
+const arquivos3d = require('../utils/arquivos3d');
+
+const uploadArquivos = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: arquivos3d.LIMITE_BYTES, files: arquivos3d.MAX_POR_ENVIO },
+  fileFilter: (req, file, cb) => {
+    if (arquivos3d.aceita(file.originalname)) return cb(null, true);
+    cb(new Error(`Os arquivos do cliente devem ser ${arquivos3d.LISTA}`));
+  },
+}).array('arquivos', arquivos3d.MAX_POR_ENVIO);
+
+const receberArquivos = (req, res, next) => uploadArquivos(req, res, (err) => {
+  if (!err) return next();
+  const mensagens = {
+    LIMIT_FILE_SIZE: `Cada arquivo pode ter até ${arquivos3d.LIMITE_MB} MB. Compacte em ZIP ou envie separado.`,
+    LIMIT_FILE_COUNT: `Envie até ${arquivos3d.MAX_POR_ENVIO} arquivos por vez.`,
+    LIMIT_UNEXPECTED_FILE: `Envie até ${arquivos3d.MAX_POR_ENVIO} arquivos por vez.`,
+  };
+  res.status(400).json({ erro: mensagens[err.code] || err.message });
+});
+
 const authCtrl = require('../controllers/authController');
 const usuariosCtrl = require('../controllers/usuariosController');
 const clientesCtrl = require('../controllers/clientesController');
@@ -52,6 +76,7 @@ const fabricacaoCtrl = require('../controllers/fabricacaoController');
 const producaoCtrl = require('../controllers/producaoController');
 const configCtrl = require('../controllers/configuracoesController');
 const notasCtrl = require('../controllers/notasFiscaisController');
+const arquivosCtrl = require('../controllers/arquivosOrcamentoController');
 
 // Auth
 router.post('/auth/login', authCtrl.login);
@@ -124,6 +149,12 @@ router.post('/orcamentos/:id/nota-fiscal', autenticar, receberNota, notasCtrl.sa
 router.get('/orcamentos/:id/nota-fiscal/arquivo', autenticar, notasCtrl.baixarArquivo);
 router.delete('/orcamentos/:id/nota-fiscal/arquivo', autenticar, notasCtrl.removerArquivo);
 router.delete('/orcamentos/:id/nota-fiscal', autenticar, notasCtrl.excluir);
+
+// Arquivos de modelo que o cliente mandou (ZIP, STL, STEP, 3MF, OBJ).
+// A lista deles vem junto de GET /orcamentos/:id; aqui só entra e sai arquivo.
+router.post('/orcamentos/:id/arquivos', autenticar, receberArquivos, arquivosCtrl.enviar);
+router.get('/orcamentos/:id/arquivos/:arquivoId', autenticar, arquivosCtrl.baixar);
+router.delete('/orcamentos/:id/arquivos/:arquivoId', autenticar, arquivosCtrl.excluir);
 
 // Orçamento de impressão — itens com material, peso e horas
 router.post('/orcamentos', autenticar, orcamentosCtrl.criar);

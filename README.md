@@ -145,6 +145,41 @@ ele é salvo: renomear ou reajustar o produto depois não muda um pedido já fec
 
 ---
 
+## Arquivos do cliente
+
+Nem todo orçamento começa do zero: tem cliente que já chega com a peça modelada e manda
+o arquivo junto do pedido. No detalhe do orçamento, o card **Arquivos do cliente** guarda
+esses arquivos ali mesmo — quem for imprimir abre o documento e acha o modelo, em vez de
+procurar o anexo no e-mail ou no WhatsApp.
+
+| | |
+|---|---|
+| Formatos | ZIP, STL, STEP, STP, 3MF, OBJ |
+| Tamanho | 25 MB por arquivo |
+| Quantidade | até 10 por envio, sem limite no total |
+| Onde fica | no banco, tabela `orcamento_arquivos` |
+
+- **Vários arquivos por orçamento** — diferente da nota fiscal, que é uma só. Cada envio
+  entra no histórico do orçamento, com os nomes.
+- **O filtro olha a extensão, não o MIME.** Navegador nenhum sabe o que é um `.stl` ou um
+  `.3mf`: o que chega no upload é `application/octet-stream`, quando não vem em branco.
+  A extensão é o único dado confiável sobre o que foi escolhido.
+- **O download sai sempre como `application/octet-stream`**, com `nosniff`: o navegador
+  guarda o arquivo em vez de tentar abrir, e nada que veio de fora manda no cabeçalho.
+- Vale para os dois tipos de orçamento, impressão e venda.
+
+O arquivo vai para o **banco**, não para o disco — o container não tem volume, então um
+arquivo em disco sumiria no próximo deploy; no MySQL ele entra no mesmo backup do resto.
+É também o que explica o limite de 25 MB: o driver manda o blob em hexadecimal, dobrando
+de tamanho no caminho, e 50 MB ainda cabem nos 64 MB do `max_allowed_packet` padrão.
+Para aceitar mais é preciso subir esse parâmetro no servidor antes de mexer no limite,
+que fica em `backend/src/utils/arquivos3d.js`.
+
+Remover o arquivo apaga a cópia daqui e nada além disso — se for a única que existia, só
+pedindo ao cliente de novo.
+
+---
+
 ## Fila de produção
 
 A tela **Produção** é o quadro kanban das OS aprovadas. Ele existe porque `status` e
@@ -570,6 +605,13 @@ orcamento_produtos  → id, orcamento_id, ordem, produto_id (NULL = item avulso)
 orcamento_historico → id, orcamento_id, usuario_id, acao, detalhe,
                       total_anterior, total_novo
 
+orcamento_arquivos  → id, orcamento_id, nome, extensao, tamanho, arquivo (LONGBLOB),
+                      criado_por, criado_em   (modelos enviados pelo cliente)
+
+notas_fiscais       → id, orcamento_id, numero, emitida_em, observacao, arquivo_nome,
+                      arquivo_tipo, arquivo_tamanho, arquivo (LONGBLOB), criado_por
+                      (uma por orçamento; a NF é emitida fora do sistema)
+
 contadores          → chave, valor   (numeração sequencial por mês)
 schema_migrations   → versao, aplicada_em
 ```
@@ -639,6 +681,18 @@ GET    /api/orcamentos/:id                  com itens/produtos e histórico
 PATCH  /api/orcamentos/:id/status           aprovar gera a OS ou o Pedido
 DELETE /api/orcamentos/:id                  (admin, só rascunho)
 GET    /api/orcamentos/:id/pdf              layout conforme o tipo e o status
+
+  # nota fiscal emitida fora do sistema — aqui é só registro
+POST   /api/orcamentos/:id/nota-fiscal      número, data e anexo (multipart: arquivo)
+GET    /api/orcamentos/:id/nota-fiscal/arquivo   baixa o anexo
+DELETE /api/orcamentos/:id/nota-fiscal/arquivo   tira só o anexo, mantém o registro
+DELETE /api/orcamentos/:id/nota-fiscal      apaga o registro inteiro
+
+  # arquivos de modelo enviados pelo cliente (ZIP, STL, STEP, STP, 3MF, OBJ)
+  # a lista vem junto de GET /api/orcamentos/:id
+POST   /api/orcamentos/:id/arquivos         até 10 por vez (multipart: arquivos)
+GET    /api/orcamentos/:id/arquivos/:arquivoId    baixa um arquivo
+DELETE /api/orcamentos/:id/arquivos/:arquivoId    remove um arquivo
 
   # orçamento de impressão
 POST   /api/orcamentos                      cria com itens aninhados

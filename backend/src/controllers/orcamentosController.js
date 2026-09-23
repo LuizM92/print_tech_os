@@ -9,6 +9,7 @@ const { proximoNumero, registrarHistorico, rotulos } = require('../utils/documen
 const {
   construirFiltro, granularidade, FORMATO_PERIODO,
 } = require('../utils/filtroOrcamentos');
+const { listarDoOrcamento: listarArquivos } = require('./arquivosOrcamentoController');
 
 const STATUS_VALIDOS = ['rascunho', 'aprovado', 'reprovado', 'cancelado'];
 const TIPOS_PECA = ['tecnica', 'decorativa'];
@@ -324,6 +325,10 @@ const carregarOrcamento = async (executor, id) => {
     arquivo_nome: nf_arquivo_nome,
     arquivo_tamanho: nf_arquivo_tamanho,
   } : null;
+
+  // Os arquivos que o cliente mandou (nome e tamanho, nunca o conteúdo) acompanham
+  // os dois tipos de orçamento — por isso entram antes do desvio de venda.
+  orcamento.arquivos = await listarArquivos(executor, id);
 
   // Orçamento de venda tem produtos, não peças impressas — carrega só o que existe.
   if (orcamento.tipo === 'produto') {
