@@ -4,11 +4,12 @@ const db = require('../utils/db');
 const monitor = require('../utils/impressoras/monitor');
 const moonraker = require('../utils/impressoras/moonraker');
 const bambu = require('../utils/impressoras/bambu');
+const flashforge = require('../utils/impressoras/flashforge');
 
-// A Flashforge já pode ser cadastrada (com serial e código), mas ainda não tem
-// adaptador: o monitor a mostra como "sem suporte" até ele existir.
 const PROTOCOLOS = ['moonraker', 'bambu', 'flashforge'];
-const PORTA_PADRAO = { moonraker: moonraker.PORTA_PADRAO, bambu: bambu.PORTA_PADRAO, flashforge: 8898 };
+const PORTA_PADRAO = {
+  moonraker: moonraker.PORTA_PADRAO, bambu: bambu.PORTA_PADRAO, flashforge: flashforge.PORTA_PADRAO,
+};
 // Os dois falam com a impressora identificando-se pelo serial e por um código que
 // aparece na tela dela: o Access Code na Bambu, o código do modo LAN na Flashforge.
 const PEDE_SERIAL = ['bambu', 'flashforge'];

@@ -38,7 +38,7 @@ const ROTULO_EVENTO = {
 const PROTOCOLOS = {
   moonraker: { porta: '7125', suportado: true },
   bambu: { porta: '8883', suportado: true },
-  flashforge: { porta: '8898', suportado: false },
+  flashforge: { porta: '8898', suportado: true },
 };
 
 const MODELOS = [
@@ -684,7 +684,7 @@ function ModalControles({ imp, enviando, onComando, onConfirmar, onFechar }) {
             )}
             {tem('luz') && (
               <div className="imp-controle">
-                <label>Luz da câmara <span className="text-muted">agora {s.luz === true ? 'acesa' : s.luz === false ? 'apagada' : '—'}</span></label>
+                <label>Luz <span className="text-muted">agora {s.luz === true ? 'acesa' : s.luz === false ? 'apagada' : '—'}</span></label>
                 <div className="flex gap-2 items-center">
                   <button className="btn btn-ghost btn-sm" disabled={enviando === `${imp.id}:luz`} onClick={() => onComando('luz', 'on')}>Acender</button>
                   <button className="btn btn-ghost btn-sm" disabled={enviando === `${imp.id}:luz`} onClick={() => onComando('luz', 'off')}>Apagar</button>

@@ -11,8 +11,9 @@ const db = require('../db');
 const { eventosDaTransicao } = require('./eventos');
 const moonraker = require('./moonraker');
 const bambu = require('./bambu');
+const flashforge = require('./flashforge');
 
-const ADAPTADORES = { moonraker, bambu };
+const ADAPTADORES = { moonraker, bambu, flashforge };
 
 const INTERVALO_MS = 3000;
 // Uma leitura perdida não é impressora desligada: Wi-Fi oscila, o Klipper às vezes
