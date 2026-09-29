@@ -8,6 +8,7 @@ import {
   ETAPAS_PRODUCAO, rotuloEtapa, ACEITA_ARQUIVOS, ARQUIVOS_LISTA, ARQUIVOS_LIMITE_MB,
 } from '../utils/format';
 import { ConfirmModal } from '../components/shared/Modal';
+import ImpressoesDaOs from '../components/shared/ImpressoesDaOs';
 
 const STATUS_OPTIONS = ['rascunho', 'aprovado', 'reprovado', 'cancelado'];
 
@@ -705,6 +706,15 @@ export default function DetalheOrcamento() {
             </div>
           </div>
         </div>
+
+        {/* O que a farm imprimiu para esta OS — só aparece quando há impressão registrada. */}
+        {orc.tipo === 'impressao' && orc.status === 'aprovado' && (
+          <ImpressoesDaOs
+            orcamentoId={orc.id}
+            horasOrcadas={(orc.itens || []).reduce((s, i) => s + parseFloat(i.horas_impressao || 0) * (i.quantidade || 1), 0)}
+            tituloCard={tituloCard}
+          />
+        )}
 
         {/* Histórico */}
         {orc.historico?.length > 0 && (

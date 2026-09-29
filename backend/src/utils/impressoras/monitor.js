@@ -9,6 +9,7 @@
  */
 const db = require('../db');
 const { eventosDaTransicao } = require('./eventos');
+const impressoes = require('./impressoes');
 const moonraker = require('./moonraker');
 const bambu = require('./bambu');
 const flashforge = require('./flashforge');
@@ -105,6 +106,8 @@ async function ler(imp) {
     if (!impressoras.some((i) => i.id === imp.id)) return;
     estados.set(imp.id, atual);
     for (const ev of eventosDaTransicao(anterior, atual)) await registrarEvento(imp.id, ev);
+    // A impressão como registro (e o vínculo com a OS) segue a mesma leitura.
+    await impressoes.sincronizar(imp, atual);
   } finally {
     lendo.delete(imp.id);
   }
@@ -116,6 +119,7 @@ async function iniciar() {
   if (timer) return;
   try {
     await recarregar();
+    await impressoes.carregar();
   } catch (err) {
     // Banco sem a migração ainda, por exemplo. O resto do sistema sobe normalmente.
     console.error(`[impressoras] monitor não iniciou: ${err.message}`);

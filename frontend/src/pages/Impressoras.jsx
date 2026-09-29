@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import Modal, { ConfirmModal } from '../components/shared/Modal';
@@ -100,6 +101,7 @@ export default function Impressoras() {
   const [cameraDe, setCameraDe] = useState(null);
   const [controlesDe, setControlesDe] = useState(null);
   const [removerId, setRemoverId] = useState(null);
+  const [vinculandoDe, setVinculandoDe] = useState(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -224,6 +226,7 @@ export default function Impressoras() {
                   },
                 })}
                 onRemover={() => setRemoverId(imp.id)}
+                onVincular={() => setVinculandoDe(imp.id)}
               />
             ))}
           </div>
@@ -238,6 +241,13 @@ export default function Impressoras() {
         />
       )}
       {cameraDe && <ModalCamera imp={cameraDe} onFechar={() => setCameraDe(null)} />}
+      {vinculandoDe && lista.find((i) => i.id === vinculandoDe)?.impressao && (
+        <ModalVincular
+          imp={lista.find((i) => i.id === vinculandoDe)}
+          onFechar={() => setVinculandoDe(null)}
+          onVinculado={() => { setVinculandoDe(null); carregar(); }}
+        />
+      )}
       {controlando && (
         <ModalControles
           imp={controlando}
@@ -265,7 +275,9 @@ export default function Impressoras() {
   );
 }
 
-function CartaoImpressora({ imp, admin, enviando, onComando, onConfirmar, onCamera, onControles, onEditar, onRemover }) {
+function CartaoImpressora({ imp, admin, enviando, onComando, onConfirmar, onCamera, onControles, onEditar, onRemover, onVincular }) {
+  const navigate = useNavigate();
+  const impressao = imp.impressao;
   const s = imp.status;
   const est = (s && ESTADOS[s.estado]) || AGUARDANDO;
   const job = s?.job;
@@ -310,6 +322,26 @@ function CartaoImpressora({ imp, admin, enviando, onComando, onConfirmar, onCame
           {s?.estado === 'sem_suporte'
             ? `O monitor da ${imp.marca || 'marca'} chega na próxima etapa`
             : online ? 'Sem impressão em andamento' : ' '}
+        </div>
+      )}
+
+      {/* A OS da impressão atual: pelo número no nome do arquivo, ou vinculada à mão. */}
+      {job && impressao && (
+        <div className="imp-os">
+          {impressao.numero_os ? (
+            <>
+              <button type="button" className="link-button" onClick={() => navigate(`/orcamentos/${impressao.orcamento_id}`)}>
+                {impressao.numero_os}
+              </button>
+              <span className="text-muted">{impressao.vinculo === 'manual' ? 'vinculada à mão' : 'pelo nome do arquivo'}</span>
+              <button type="button" className="imp-os-trocar" onClick={onVincular}>trocar</button>
+            </>
+          ) : (
+            <>
+              <span className="text-muted">Sem OS</span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={onVincular}>Vincular OS</button>
+            </>
+          )}
         </div>
       )}
 
@@ -535,6 +567,71 @@ function ModalCadastro({ inicial, onFechar, onSalvo }) {
           <button type="submit" className="btn btn-primary" disabled={salvando}>{salvando ? <span className="spinner" /> : 'Salvar'}</button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/** Escolhe a OS da impressão atual — para arquivo sem o número no nome, ou vínculo errado. */
+function ModalVincular({ imp, onFechar, onVinculado }) {
+  const [ordens, setOrdens] = useState(null);
+  const [busca, setBusca] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    // Só o que ainda pode ir para a impressora: da fila até o acabamento (reimpressão).
+    const ABERTAS = ['fila', 'desenho', 'producao', 'acabamento'];
+    api.get('/producao')
+      .then(({ data }) => setOrdens(data.colunas.filter((c) => ABERTAS.includes(c.codigo)).flatMap((c) =>
+        c.ordens.map((o) => ({ ...o, etapa_rotulo: c.rotulo })))))
+      .catch(() => setOrdens([]));
+  }, []);
+
+  const salvar = async (orcamentoId) => {
+    setSalvando(true);
+    try {
+      const { data } = await api.put(`/impressoras/${imp.id}/vinculo`, { orcamento_id: orcamentoId });
+      toast.success(data.mensagem);
+      onVinculado();
+    } catch (err) {
+      toast.error(err.response?.data?.erro || 'Erro ao vincular');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const termo = busca.trim().toLowerCase();
+  const filtradas = (ordens || []).filter((o) => !termo
+    || o.numero_os?.toLowerCase().includes(termo) || o.cliente_nome?.toLowerCase().includes(termo));
+
+  return (
+    <Modal isOpen onClose={onFechar} title={`Vincular OS — ${imp.nome}`}>
+      <p className="imp-dica" style={{ marginTop: 0, marginBottom: 12 }}>
+        Arquivo: <strong>{nomeArquivo(imp.impressao.arquivo)}</strong>. Salvando o arquivo com o número
+        da OS no nome (ex.: OS-202609-0005 - peça.gcode), o vínculo é automático.
+      </p>
+      <input placeholder="Buscar por número da OS ou cliente..." value={busca} onChange={(e) => setBusca(e.target.value)} autoFocus />
+      <div className="imp-vincular-lista">
+        {!ordens ? <div className="loading-screen"><span className="spinner" /></div>
+          : filtradas.length === 0 ? <p className="text-muted" style={{ padding: 12, fontSize: 13 }}>Nenhuma OS aberta encontrada.</p>
+            : filtradas.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className={`imp-vincular-item ${o.id === imp.impressao.orcamento_id ? 'atual' : ''}`}
+                disabled={salvando}
+                onClick={() => salvar(o.id)}
+              >
+                <strong>{o.numero_os}</strong>
+                <span>{o.cliente_nome}</span>
+                <span className="text-muted">{o.etapa_rotulo}</span>
+              </button>
+            ))}
+      </div>
+      {imp.impressao.orcamento_id && (
+        <div className="form-actions">
+          <button type="button" className="btn btn-ghost" disabled={salvando} onClick={() => salvar(null)}>Tirar o vínculo</button>
+        </div>
+      )}
     </Modal>
   );
 }

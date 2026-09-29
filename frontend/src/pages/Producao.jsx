@@ -4,6 +4,7 @@ import api from '../services/api';
 import toast from 'react-hot-toast';
 import { fmtMoeda, fmtData, fmtHoras, ETAPAS_PRODUCAO, rotuloEtapa } from '../utils/format';
 import { PERIODOS, intervaloDoPeriodo } from '../utils/periodo';
+import Icon from '../components/shared/Icon';
 
 const HOJE = () => new Date().toISOString().slice(0, 10);
 
@@ -55,6 +56,13 @@ export default function Producao() {
     const timer = setTimeout(carregar, busca ? 350 : 0);
     return () => clearTimeout(timer);
   }, [carregar, busca]);
+
+  // O cartão mostra o progresso das impressoras, então o quadro se atualiza sozinho.
+  // Sem pressa: a tela de Impressoras é que é ao vivo; aqui é o panorama.
+  useEffect(() => {
+    const timer = setInterval(() => { if (!document.hidden && !arrastando) carregar(); }, 30000);
+    return () => clearInterval(timer);
+  }, [carregar, arrastando]);
 
   /**
    * Move o cartão na tela antes da resposta do servidor: arrastar tem que parecer
@@ -236,6 +244,24 @@ export default function Producao() {
                           {' · '}{fmtHoras(ordem.horas)}
                           {parseFloat(ordem.gramas) > 0 && ` · ${Math.round(ordem.gramas)} g`}
                         </div>
+
+                        {/* Vem da farm: o que está na máquina agora e o tempo já impresso. */}
+                        {ordem.impressao?.rodando.map((r) => (
+                          <div key={r.impressora} className={`kanban-impressora ${r.estado === 'pausada' ? 'pausada' : ''}`}>
+                            <Icon name="impressora" />
+                            <span>{r.impressora}</span>
+                            {r.estado === 'pausada' ? <span>· pausada</span>
+                              : r.estado === 'offline' ? <span>· offline</span>
+                                : r.progresso !== null && <span>· {Math.round(r.progresso)}%</span>}
+                            {r.estado === 'imprimindo' && r.restante_s > 0 && <span>· faltam {fmtHoras(r.restante_s / 3600)}</span>}
+                          </div>
+                        ))}
+                        {ordem.impressao?.concluidas > 0 && (
+                          <div className="kanban-meta" title="Tempo de máquina das impressões concluídas, contra as horas orçadas">
+                            Impresso {fmtHoras(ordem.impressao.real_s / 3600)} de {fmtHoras(ordem.horas)}
+                            {' · '}{ordem.impressao.concluidas} impress{ordem.impressao.concluidas === 1 ? 'ão' : 'ões'}
+                          </div>
+                        )}
 
                         <div className="kanban-rodape">
                           <input

@@ -2,6 +2,30 @@ const db = require('../utils/db');
 const { registrarHistorico } = require('../utils/documentos');
 const { ETAPAS, ehEtapaValida, detalheMovimento, rotuloEtapa } = require('../utils/producao');
 const { apenasData } = require('../utils/filtroOrcamentos');
+const impressoes = require('../utils/impressoras/impressoes');
+const monitor = require('../utils/impressoras/monitor');
+
+/**
+ * O que a farm diz sobre a OS: o que está na máquina agora (com o progresso ao vivo do
+ * monitor) e o tempo de impressão já gasto, para comparar com as horas orçadas.
+ */
+function impressaoDaOs(resumo) {
+  if (!resumo) return null;
+  return {
+    concluidas: resumo.concluidas,
+    real_s: resumo.real_s,
+    perdido_s: resumo.perdido_s,
+    rodando: resumo.rodando.map((r) => {
+      const status = monitor.estadoDe(r.impressora_id);
+      return {
+        impressora: monitor.buscar(r.impressora_id)?.nome || 'Impressora',
+        estado: status?.estado || null,
+        progresso: status?.job?.progresso ?? null,
+        restante_s: status?.job?.restante_s ?? null,
+      };
+    }),
+  };
+}
 
 // A coluna "Entregue" só mostra o que saiu há pouco tempo — senão ela cresce para
 // sempre e engole o quadro. O resto continua no histórico e na listagem de orçamentos.
@@ -58,6 +82,9 @@ const quadro = async (req, res) => {
         ORDER BY o.previsao_entrega IS NULL, o.previsao_entrega, o.aprovado_em`,
       params
     );
+
+    const resumos = await impressoes.resumoPorOs(ordens.map((o) => o.id));
+    ordens.forEach((o) => { o.impressao = impressaoDaOs(resumos.get(o.id)); });
 
     // Vem agrupado pronto para o quadro: cada etapa com suas OS e seus totais.
     const colunas = ETAPAS.map((etapa) => {
@@ -147,4 +174,14 @@ const mover = async (req, res) => {
   }
 };
 
-module.exports = { etapas, quadro, mover };
+/** As impressões de uma OS, para o detalhe dela. */
+const impressoesDaOs = async (req, res) => {
+  try {
+    res.json(await impressoes.daOs(req.params.id));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro interno do servidor' });
+  }
+};
+
+module.exports = { etapas, quadro, mover, impressoesDaOs };

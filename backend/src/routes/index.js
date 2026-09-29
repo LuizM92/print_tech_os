@@ -135,6 +135,7 @@ router.delete('/fabricacao/produtos/:id', autenticar, apenasAdmin, fabricacaoCtr
 router.get('/producao/etapas', autenticar, producaoCtrl.etapas);
 router.get('/producao', autenticar, producaoCtrl.quadro);
 router.patch('/producao/:id', autenticar, producaoCtrl.mover);
+router.get('/producao/:id/impressoes', autenticar, producaoCtrl.impressoesDaOs);
 
 // Impressoras — monitor da farm. O backend fala com elas pela rede interna; a tela só
 // fala com o backend. Qualquer usuário comanda (quem opera a farm não é admin), e todo
@@ -147,6 +148,7 @@ router.put('/impressoras/:id', autenticar, apenasAdmin, impressorasCtrl.atualiza
 router.delete('/impressoras/:id', autenticar, apenasAdmin, impressorasCtrl.excluir);
 router.get('/impressoras/:id/eventos', autenticar, impressorasCtrl.eventos);
 router.post('/impressoras/:id/comando', autenticar, impressorasCtrl.comando);
+router.put('/impressoras/:id/vinculo', autenticar, impressorasCtrl.vincular);
 router.get('/impressoras/:id/cameras', autenticar, impressorasCtrl.cameras);
 // Sem `autenticar`: o <img> não manda header. O token curto vem na URL (ver o controller).
 router.get('/impressoras/:id/camera/:idx/stream', impressorasCtrl.cameraStream);

@@ -2,6 +2,7 @@ const { Readable } = require('stream');
 const jwt = require('jsonwebtoken');
 const db = require('../utils/db');
 const monitor = require('../utils/impressoras/monitor');
+const impressoes = require('../utils/impressoras/impressoes');
 const moonraker = require('../utils/impressoras/moonraker');
 const bambu = require('../utils/impressoras/bambu');
 const flashforge = require('../utils/impressoras/flashforge');
@@ -54,8 +55,38 @@ const publico = (imp) => ({
   tem_codigo_acesso: !!imp.codigo_acesso,
 });
 
+/** A impressão que o card mostra, com a OS vinculada (se houver). */
+const impressaoPublica = (i) => (i ? {
+  id: i.id,
+  arquivo: i.arquivo,
+  resultado: i.resultado,
+  orcamento_id: i.orcamento_id,
+  numero_os: i.numero_os,
+  vinculo: i.vinculo,
+} : null);
+
 const listar = async (req, res) => {
-  res.json(monitor.lista().map((imp) => ({ ...publico(imp), status: monitor.estadoDe(imp.id) })));
+  res.json(monitor.lista().map((imp) => {
+    const status = monitor.estadoDe(imp.id);
+    return { ...publico(imp), status, impressao: impressaoPublica(impressoes.atualDe(imp.id, status)) };
+  }));
+};
+
+/** Põe, troca ou tira a OS da impressão atual da impressora (card → "Vincular OS"). */
+const vincular = async (req, res) => {
+  const imp = monitor.buscar(req.params.id);
+  if (!imp) return res.status(404).json({ erro: 'Impressora não encontrada' });
+  try {
+    const i = await impressoes.vincular(imp, monitor.estadoDe(imp.id), req.body.orcamento_id || null, req.usuario.id);
+    res.json({
+      mensagem: i.numero_os ? `${imp.nome} vinculada à ${i.numero_os}` : `${imp.nome} sem OS vinculada`,
+      impressao: impressaoPublica(i),
+    });
+  } catch (err) {
+    if (err.validacao) return res.status(400).json({ erro: err.message });
+    console.error(err);
+    res.status(500).json({ erro: 'Erro interno do servidor' });
+  }
 };
 
 const eventos = async (req, res) => {
@@ -292,6 +323,7 @@ const cameraProxy = (tipo) => async (req, res) => {
 
 module.exports = {
   listar,
+  vincular,
   eventos,
   criar,
   atualizar,
