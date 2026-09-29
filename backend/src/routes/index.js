@@ -77,6 +77,7 @@ const producaoCtrl = require('../controllers/producaoController');
 const configCtrl = require('../controllers/configuracoesController');
 const notasCtrl = require('../controllers/notasFiscaisController');
 const arquivosCtrl = require('../controllers/arquivosOrcamentoController');
+const impressorasCtrl = require('../controllers/impressorasController');
 
 // Auth
 router.post('/auth/login', authCtrl.login);
@@ -134,6 +135,22 @@ router.delete('/fabricacao/produtos/:id', autenticar, apenasAdmin, fabricacaoCtr
 router.get('/producao/etapas', autenticar, producaoCtrl.etapas);
 router.get('/producao', autenticar, producaoCtrl.quadro);
 router.patch('/producao/:id', autenticar, producaoCtrl.mover);
+
+// Impressoras — monitor da farm. O backend fala com elas pela rede interna; a tela só
+// fala com o backend. Qualquer usuário comanda (quem opera a farm não é admin), e todo
+// comando fica no histórico com o nome de quem mandou. Cadastro é só do admin.
+// /testar vem antes de /:id — senão o Express trata 'testar' como um id.
+router.get('/impressoras', autenticar, impressorasCtrl.listar);
+router.post('/impressoras/testar', autenticar, apenasAdmin, impressorasCtrl.testar);
+router.post('/impressoras', autenticar, apenasAdmin, impressorasCtrl.criar);
+router.put('/impressoras/:id', autenticar, apenasAdmin, impressorasCtrl.atualizar);
+router.delete('/impressoras/:id', autenticar, apenasAdmin, impressorasCtrl.excluir);
+router.get('/impressoras/:id/eventos', autenticar, impressorasCtrl.eventos);
+router.post('/impressoras/:id/comando', autenticar, impressorasCtrl.comando);
+router.get('/impressoras/:id/cameras', autenticar, impressorasCtrl.cameras);
+// Sem `autenticar`: o <img> não manda header. O token curto vem na URL (ver o controller).
+router.get('/impressoras/:id/camera/:idx/stream', impressorasCtrl.cameraStream);
+router.get('/impressoras/:id/camera/:idx/snapshot', impressorasCtrl.cameraSnapshot);
 
 // Orçamentos — compartilhado pelos dois tipos (impressão e venda)
 // /resumo vem antes de /:id — senão o Express trata 'resumo' como um id.

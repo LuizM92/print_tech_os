@@ -24,6 +24,7 @@ const GRUPOS = [
     titulo: 'Oficina',
     itens: [
       { to: '/producao', icone: 'producao', rotulo: 'Produção' },
+      { to: '/impressoras', icone: 'impressora', rotulo: 'Impressoras' },
       // Catálogo do que a gente fabrica (SKU pai e variações). O rótulo não repete
       // "Produtos" para não confundir com a mercadoria de revenda, em Cadastros.
       { to: '/fabricacao/produtos', icone: 'fabricacao', rotulo: 'Fabricação' },

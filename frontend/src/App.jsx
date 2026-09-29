@@ -19,6 +19,7 @@ import Produtos from './pages/Produtos';
 import FabricacaoProdutos from './pages/FabricacaoProdutos';
 import Producao from './pages/Producao';
 import DetalheOrcamento from './pages/DetalheOrcamento';
+import Impressoras from './pages/Impressoras';
 import Configuracoes from './pages/Configuracoes';
 import './index.css';
 
@@ -69,6 +70,7 @@ function AppRoutes() {
       <Route path="/vendas/:id/editar" element={<PrivateRoute><AppLayout><EditorOrcamentoVenda /></AppLayout></PrivateRoute>} />
       <Route path="/produtos" element={<PrivateRoute><AppLayout><Produtos /></AppLayout></PrivateRoute>} />
       <Route path="/producao" element={<PrivateRoute><AppLayout><Producao /></AppLayout></PrivateRoute>} />
+      <Route path="/impressoras" element={<PrivateRoute><AppLayout><Impressoras /></AppLayout></PrivateRoute>} />
       <Route path="/fabricacao/produtos" element={<PrivateRoute><AppLayout><FabricacaoProdutos /></AppLayout></PrivateRoute>} />
       <Route path="/usuarios" element={<PrivateRoute adminOnly><AppLayout><Usuarios /></AppLayout></PrivateRoute>} />
       <Route path="/configuracoes" element={<PrivateRoute><AppLayout><Configuracoes /></AppLayout></PrivateRoute>} />
