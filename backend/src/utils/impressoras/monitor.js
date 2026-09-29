@@ -40,10 +40,14 @@ function motivoFalha(err) {
 
 async function recarregar() {
   const [rows] = await db.query('SELECT * FROM impressoras WHERE ativo = 1 ORDER BY ordem, nome');
+  // Quem saiu do cadastro sai também da memória. Quem trocou de protocolo também: a
+  // leitura antiga era de outro adaptador.
+  const antigos = new Map(impressoras.map((i) => [i.id, i.protocolo]));
+  const atuais = new Map(rows.map((i) => [i.id, i.protocolo]));
   impressoras = rows;
-  // Quem saiu do cadastro sai também da memória.
-  const ids = new Set(rows.map((i) => i.id));
-  for (const id of estados.keys()) if (!ids.has(id)) estados.delete(id);
+  for (const id of estados.keys()) {
+    if (!atuais.has(id) || atuais.get(id) !== antigos.get(id)) estados.delete(id);
+  }
 }
 
 async function registrarEvento(impressoraId, ev, usuarioId = null) {
@@ -62,7 +66,13 @@ async function registrarEvento(impressoraId, ev, usuarioId = null) {
 
 async function ler(imp) {
   const adaptador = adaptadorDe(imp);
-  if (!adaptador || lendo.has(imp.id)) return;
+  if (!adaptador) {
+    // Cadastrada, mas sem adaptador ainda (Bambu, Flashforge): a tela mostra isso em vez
+    // de ficar em "conectando" para sempre.
+    estados.set(imp.id, { estado: 'sem_suporte', mensagem: null, job: null, temperaturas: {} });
+    return;
+  }
+  if (lendo.has(imp.id)) return;
   lendo.add(imp.id);
   try {
     const anterior = estados.get(imp.id) || null;

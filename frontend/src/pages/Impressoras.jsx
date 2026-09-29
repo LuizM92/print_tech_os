@@ -18,7 +18,11 @@ const ESTADOS = {
   offline: { rotulo: 'Offline', classe: 'imp-offline' },
   iniciando: { rotulo: 'Iniciando', classe: 'imp-pausada' },
   ociosa: { rotulo: 'Livre', classe: 'imp-ociosa' },
+  sem_suporte: { rotulo: 'Em breve', classe: 'imp-ociosa' },
 };
+
+/** Estados em que a impressora não responde a comando nem tem câmera para abrir. */
+const SEM_CONEXAO = ['offline', 'sem_suporte'];
 const AGUARDANDO = { rotulo: 'Conectando…', classe: 'imp-ociosa' };
 
 const ROTULO_EVENTO = {
@@ -26,9 +30,36 @@ const ROTULO_EVENTO = {
   retomada: 'Retomou', erro: 'Erro', offline: 'Saiu da rede', online: 'Voltou à rede', comando: 'Comando',
 };
 
-const MARCAS = ['Creality', 'Elegoo', 'Flashforge', 'Bambu Lab', 'Outra'];
+// Os modelos da farm. Escolher o modelo decide como o backend fala com a impressora
+// (protocolo) e quais campos o cadastro pede. Modelo novo de uma marca que já existe
+// é só uma linha aqui.
+const PROTOCOLOS = {
+  moonraker: { porta: '7125', suportado: true },
+  bambu: { porta: '8883', suportado: false },
+  flashforge: { porta: '8898', suportado: false },
+};
 
-const FORM_VAZIO = { nome: '', marca: 'Creality', modelo: '', host: '', porta: '7125', api_key: '', url_camera: '', ordem: '0' };
+const MODELOS = [
+  { id: 'k1c', marca: 'Creality', modelo: 'K1C', protocolo: 'moonraker' },
+  { id: 'k1se', marca: 'Creality', modelo: 'K1 SE', protocolo: 'moonraker', semCamera: true },
+  { id: 'k1max', marca: 'Creality', modelo: 'K1 Max', protocolo: 'moonraker' },
+  { id: 'n4max', marca: 'Elegoo', modelo: 'Neptune 4 Max', protocolo: 'moonraker', semCamera: true },
+  { id: 'ad5x', marca: 'Flashforge', modelo: 'AD5X', protocolo: 'flashforge' },
+  { id: 'a1', marca: 'Bambu Lab', modelo: 'A1', protocolo: 'bambu' },
+  { id: 'p1s', marca: 'Bambu Lab', modelo: 'P1S', protocolo: 'bambu' },
+];
+const OUTRA = { id: 'outra', marca: '', modelo: '', protocolo: 'moonraker' };
+const MARCAS_CATALOGO = [...new Set(MODELOS.map((m) => m.marca))];
+
+const modeloPorId = (id) => MODELOS.find((m) => m.id === id) || OUTRA;
+/** Na edição, reencontra o item do catálogo pelo que está gravado. */
+const modeloDoCadastro = (imp) =>
+  MODELOS.find((m) => m.marca === imp.marca && m.modelo === imp.modelo && m.protocolo === imp.protocolo) || OUTRA;
+
+const FORM_VAZIO = {
+  tipo: 'k1c', nome: '', marca: '', modelo: '', host: '', porta: '7125',
+  api_key: '', url_camera: '', serial: '', codigo_acesso: '', ordem: '0',
+};
 
 /** 1h 23min · 12min · <1min */
 const fmtDuracao = (s) => {
@@ -180,9 +211,14 @@ export default function Impressoras() {
                 onEditar={() => setCadastro({
                   id: imp.id,
                   temApiKey: imp.tem_api_key,
+                  temCodigo: imp.tem_codigo_acesso,
+                  protocoloGravado: imp.protocolo,
                   form: {
-                    nome: imp.nome, marca: imp.marca || 'Outra', modelo: imp.modelo || '', host: imp.host,
-                    porta: String(imp.porta || ''), api_key: '', url_camera: imp.url_camera || '', ordem: String(imp.ordem || 0),
+                    ...FORM_VAZIO,
+                    tipo: modeloDoCadastro(imp).id,
+                    nome: imp.nome, marca: imp.marca || '', modelo: imp.modelo || '', host: imp.host,
+                    porta: String(imp.porta || ''), url_camera: imp.url_camera || '',
+                    serial: imp.serial || '', ordem: String(imp.ordem || 0),
                   },
                 })}
                 onRemover={() => setRemoverId(imp.id)}
@@ -232,7 +268,7 @@ function CartaoImpressora({ imp, admin, enviando, onComando, onConfirmar, onCame
   const est = (s && ESTADOS[s.estado]) || AGUARDANDO;
   const job = s?.job;
   const ocupado = (acao) => enviando === `${imp.id}:${acao}`;
-  const online = s && s.estado !== 'offline';
+  const online = s && !SEM_CONEXAO.includes(s.estado);
   const emAndamento = ['imprimindo', 'pausada'].includes(s?.estado);
 
   return (
@@ -266,7 +302,11 @@ function CartaoImpressora({ imp, admin, enviando, onComando, onConfirmar, onCame
           ) : null}
         </div>
       ) : (
-        <div className="imp-job imp-job-vazio">{online ? 'Sem impressão em andamento' : ' '}</div>
+        <div className="imp-job imp-job-vazio">
+          {s?.estado === 'sem_suporte'
+            ? `O monitor da ${imp.marca || 'marca'} chega na próxima etapa`
+            : online ? 'Sem impressão em andamento' : ' '}
+        </div>
       )}
 
       {online && (
@@ -297,7 +337,7 @@ function CartaoImpressora({ imp, admin, enviando, onComando, onConfirmar, onCame
         )}
         <div className="imp-acoes-direita">
           <button className="btn-icon" onClick={onCamera} disabled={!online} title="Câmera" aria-label="Câmera"><Icon name="camera" /></button>
-          <button className="btn-icon" onClick={onControles} title="Controles e histórico" aria-label="Controles e histórico"><Icon name="settings" /></button>
+          <button className="btn-icon" onClick={onControles} disabled={s?.estado === 'sem_suporte'} title="Controles e histórico" aria-label="Controles e histórico"><Icon name="settings" /></button>
           {admin && <button className="btn-icon" onClick={onEditar} title="Editar cadastro" aria-label="Editar cadastro"><Icon name="editar" /></button>}
           {admin && <button className="btn-icon danger" onClick={onRemover} title="Remover" aria-label="Remover"><Icon name="excluir" /></button>}
         </div>
@@ -314,7 +354,33 @@ function ModalCadastro({ inicial, onFechar, onSalvo }) {
   const editando = !!inicial.id;
   const f = (campo) => (e) => { setForm({ ...form, [campo]: e.target.value }); setTeste(null); };
 
-  const corpo = () => ({ ...form, id: inicial.id, protocolo: 'moonraker', remover_api_key: removerKey });
+  const tipo = modeloPorId(form.tipo);
+  const { protocolo } = tipo;
+  const suportado = PROTOCOLOS[protocolo].suportado;
+  const pedeSerial = protocolo !== 'moonraker';
+  // O código gravado só vale enquanto o protocolo não muda — Access Code da Bambu não
+  // serve para a Flashforge.
+  const temCodigo = inicial.temCodigo && inicial.protocoloGravado === protocolo;
+
+  /** Trocar o modelo acerta a porta padrão do jeito de conectar dele. */
+  const escolherTipo = (e) => {
+    const novo = modeloPorId(e.target.value);
+    setForm({
+      ...form,
+      tipo: novo.id,
+      porta: PROTOCOLOS[novo.protocolo].porta,
+    });
+    setTeste(null);
+  };
+
+  const corpo = () => ({
+    ...form,
+    id: inicial.id,
+    protocolo,
+    marca: tipo.id === 'outra' ? form.marca : tipo.marca,
+    modelo: tipo.id === 'outra' ? form.modelo : tipo.modelo,
+    remover_api_key: removerKey,
+  });
 
   const testar = async () => {
     setTeste({ ok: null, texto: 'Testando…' });
@@ -344,70 +410,122 @@ function ModalCadastro({ inicial, onFechar, onSalvo }) {
   return (
     <Modal isOpen onClose={onFechar} title={editando ? 'Editar impressora' : 'Nova impressora'}>
       <form onSubmit={salvar}>
+        <div className="form-group">
+          <label>Modelo</label>
+          <select value={form.tipo} onChange={escolherTipo}>
+            {MARCAS_CATALOGO.map((marca) => (
+              <optgroup key={marca} label={marca}>
+                {MODELOS.filter((m) => m.marca === marca).map((m) => (
+                  <option key={m.id} value={m.id}>{m.marca} {m.modelo}</option>
+                ))}
+              </optgroup>
+            ))}
+            <option value="outra">Outra com Klipper (Moonraker)</option>
+          </select>
+        </div>
+
+        {tipo.id === 'outra' && (
+          <div className="form-row">
+            <div className="form-group">
+              <label>Marca</label>
+              <input value={form.marca} onChange={f('marca')} placeholder="Ex: Voron" />
+            </div>
+            <div className="form-group">
+              <label>Modelo</label>
+              <input value={form.modelo} onChange={f('modelo')} placeholder="Ex: 2.4" />
+            </div>
+          </div>
+        )}
+
+        {!suportado && (
+          <div className="imp-aviso">
+            O monitor da {tipo.marca} chega na próxima etapa. Dá para cadastrar agora — ela aparece
+            como "Em breve" e passa a ser monitorada sozinha quando o suporte entrar.
+          </div>
+        )}
+
         <div className="form-row">
           <div className="form-group">
             <label>Nome</label>
-            <input value={form.nome} onChange={f('nome')} placeholder="Ex: K1C-01" required />
+            <input value={form.nome} onChange={f('nome')} placeholder={`Ex: ${tipo.modelo || 'K1C'}-01`} required />
           </div>
           <div className="form-group">
             <label>Ordem na tela</label>
             <input type="number" value={form.ordem} onChange={f('ordem')} />
           </div>
         </div>
-        <div className="form-row">
-          <div className="form-group">
-            <label>Marca</label>
-            <select value={form.marca} onChange={f('marca')}>
-              {MARCAS.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Modelo</label>
-            <input value={form.modelo} onChange={f('modelo')} placeholder="Ex: K1 Max" />
-          </div>
-        </div>
-        {['Bambu Lab', 'Flashforge'].includes(form.marca) && (
-          <div className="imp-aviso">
-            Esta primeira versão fala só com Klipper (Moonraker). {form.marca} entra na próxima etapa —
-            dá para cadastrar agora, mas ela vai aparecer offline até lá.
-          </div>
-        )}
+
         <div className="form-row">
           <div className="form-group">
             <label>IP na rede interna</label>
-            <input value={form.host} onChange={f('host')} placeholder="192.168.1.50" required />
+            <input value={form.host} onChange={f('host')} placeholder="192.168.3.50" required />
           </div>
-          <div className="form-group">
-            <label>Porta do Moonraker</label>
-            <input type="number" value={form.porta} onChange={f('porta')} placeholder="7125" />
-          </div>
-        </div>
-        <div className="form-group">
-          <label>API key do Moonraker (opcional)</label>
-          <input
-            value={form.api_key}
-            onChange={f('api_key')}
-            disabled={removerKey}
-            placeholder={inicial.temApiKey ? '•••••• gravada — deixe em branco para manter' : 'Só se o servidor não estiver em trusted_clients'}
-          />
-          {inicial.temApiKey && (
-            <label className="imp-check">
-              <input type="checkbox" checked={removerKey} onChange={(e) => setRemoverKey(e.target.checked)} /> Apagar a API key gravada
-            </label>
+          {protocolo === 'moonraker' && (
+            <div className="form-group">
+              <label>Porta do Moonraker</label>
+              <input type="number" value={form.porta} onChange={f('porta')} placeholder="7125" />
+            </div>
           )}
         </div>
-        <div className="form-group">
-          <label>URL da câmera (opcional)</label>
-          <input value={form.url_camera} onChange={f('url_camera')} placeholder="Vazio = usa a câmera configurada no Klipper" />
-          <div className="imp-dica">Só preencha se a câmera não abrir. Nas K1 costuma ser http://IP:8080/?action=stream</div>
-        </div>
+
+        {pedeSerial && (
+          <div className="form-row">
+            <div className="form-group">
+              <label>Número de série</label>
+              <input value={form.serial} onChange={f('serial')} required />
+              <div className="imp-dica">
+                Aparece nas informações do aparelho, na tela da impressora
+              </div>
+            </div>
+            <div className="form-group">
+              <label>{protocolo === 'bambu' ? 'Access Code' : 'Código do modo LAN'}</label>
+              <input
+                value={form.codigo_acesso}
+                onChange={f('codigo_acesso')}
+                required={!temCodigo}
+                placeholder={temCodigo ? '•••••• gravado — deixe em branco para manter' : ''}
+              />
+              <div className="imp-dica">
+                {protocolo === 'bambu' ? 'Aparece nas configurações de rede da impressora' : 'Aparece na tela da impressora ao ligar o modo LAN'}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {protocolo === 'moonraker' && (
+          <>
+            <div className="form-group">
+              <label>API key do Moonraker (opcional)</label>
+              <input
+                value={form.api_key}
+                onChange={f('api_key')}
+                disabled={removerKey}
+                placeholder={inicial.temApiKey ? '•••••• gravada — deixe em branco para manter' : 'Só se o servidor não estiver em trusted_clients'}
+              />
+              {inicial.temApiKey && (
+                <label className="imp-check">
+                  <input type="checkbox" checked={removerKey} onChange={(e) => setRemoverKey(e.target.checked)} /> Apagar a API key gravada
+                </label>
+              )}
+            </div>
+            {!tipo.semCamera && (
+              <div className="form-group">
+                <label>URL da câmera (opcional)</label>
+                <input value={form.url_camera} onChange={f('url_camera')} placeholder="Vazio = usa a câmera configurada no Klipper" />
+                <div className="imp-dica">Só preencha se a câmera não abrir. Nas K1 costuma ser http://IP:8080/?action=stream</div>
+              </div>
+            )}
+          </>
+        )}
 
         {teste && (
           <div className={`imp-teste ${teste.ok === true ? 'ok' : teste.ok === false ? 'falhou' : ''}`}>{teste.texto}</div>
         )}
 
         <div className="form-actions">
-          <button type="button" className="btn btn-ghost" onClick={testar} disabled={!form.host}>Testar conexão</button>
+          {suportado && (
+            <button type="button" className="btn btn-ghost" onClick={testar} disabled={!form.host}>Testar conexão</button>
+          )}
           <div style={{ flex: 1 }} />
           <button type="button" className="btn btn-ghost" onClick={onFechar}>Cancelar</button>
           <button type="submit" className="btn btn-primary" disabled={salvando}>{salvando ? <span className="spinner" /> : 'Salvar'}</button>
@@ -515,7 +633,7 @@ function ModalControles({ imp, enviando, onComando, onConfirmar, onFechar }) {
     if (await onComando(acao, valores[acao])) carregarEventos();
   };
 
-  const online = s.estado && s.estado !== 'offline';
+  const online = s.estado && !SEM_CONEXAO.includes(s.estado);
   const linhas = [
     { acao: 'temperatura_bico', rotulo: 'Temperatura do bico', unidade: '°C', atual: fmtTemp(s.temperaturas?.bico), max: 350 },
     { acao: 'temperatura_mesa', rotulo: 'Temperatura da mesa', unidade: '°C', atual: fmtTemp(s.temperaturas?.mesa), max: 120 },

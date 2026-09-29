@@ -4,9 +4,13 @@ const db = require('../utils/db');
 const monitor = require('../utils/impressoras/monitor');
 const moonraker = require('../utils/impressoras/moonraker');
 
-// Bambu e Flashforge entram aqui quando os adaptadores existirem.
-const PROTOCOLOS = ['moonraker'];
-const PORTA_PADRAO = { moonraker: moonraker.PORTA_PADRAO };
+// Bambu e Flashforge já podem ser cadastradas (com serial e código), mas ainda não têm
+// adaptador: o monitor as mostra como "sem suporte" até ele existir.
+const PROTOCOLOS = ['moonraker', 'bambu', 'flashforge'];
+const PORTA_PADRAO = { moonraker: moonraker.PORTA_PADRAO, bambu: 8883, flashforge: 8898 };
+// Os dois falam com a impressora identificando-se pelo serial e por um código que
+// aparece na tela dela: o Access Code na Bambu, o código do modo LAN na Flashforge.
+const PEDE_SERIAL = ['bambu', 'flashforge'];
 
 const ROTULO_ACAO = {
   pausar: 'Pausou',
@@ -35,8 +39,10 @@ const publico = (imp) => ({
   host: imp.host,
   porta: imp.porta,
   url_camera: imp.url_camera,
+  serial: imp.serial,
   ordem: imp.ordem,
   tem_api_key: !!imp.api_key,
+  tem_codigo_acesso: !!imp.codigo_acesso,
 });
 
 const listar = async (req, res) => {
@@ -68,6 +74,8 @@ function lerCadastro(body) {
   if (!PROTOCOLOS.includes(protocolo)) return { erro: 'Protocolo ainda não suportado' };
   const porta = body.porta ? parseInt(body.porta, 10) : PORTA_PADRAO[protocolo];
   if (!Number.isInteger(porta) || porta < 1 || porta > 65535) return { erro: 'Porta inválida' };
+  const serial = PEDE_SERIAL.includes(protocolo) ? body.serial?.trim() || null : null;
+  if (PEDE_SERIAL.includes(protocolo) && !serial) return { erro: 'Informe o número de série da impressora' };
   return {
     dados: {
       nome: body.nome.trim(),
@@ -76,17 +84,38 @@ function lerCadastro(body) {
       protocolo,
       host,
       porta,
-      url_camera: body.url_camera?.trim() || null,
+      serial,
+      url_camera: protocolo === 'moonraker' ? body.url_camera?.trim() || null : null,
       ordem: parseInt(body.ordem, 10) || 0,
     },
   };
 }
 
+/**
+ * Credenciais da edição: em branco = manter a gravada (a tela nunca as recebe).
+ * Trocar de protocolo apaga a que não vale mais — API key é do Moonraker, código de
+ * acesso é da Bambu/Flashforge.
+ */
+function credenciais(body, dados, atual) {
+  const out = {};
+  if (dados.protocolo !== 'moonraker' || body.remover_api_key) out.api_key = null;
+  else if (body.api_key?.trim()) out.api_key = body.api_key.trim();
+
+  if (!PEDE_SERIAL.includes(dados.protocolo)) out.codigo_acesso = null;
+  else if (body.codigo_acesso?.trim()) out.codigo_acesso = body.codigo_acesso.trim();
+  else if (!atual?.codigo_acesso || atual.protocolo !== dados.protocolo) {
+    return { erro: dados.protocolo === 'bambu' ? 'Informe o Access Code da impressora' : 'Informe o código do modo LAN' };
+  }
+  return { out };
+}
+
 const criar = async (req, res) => {
   const { erro, dados } = lerCadastro(req.body);
   if (erro) return res.status(400).json({ erro });
+  const cred = credenciais(req.body, dados, null);
+  if (cred.erro) return res.status(400).json({ erro: cred.erro });
   try {
-    const [r] = await db.query('INSERT INTO impressoras SET ?', [{ ...dados, api_key: req.body.api_key?.trim() || null }]);
+    const [r] = await db.query('INSERT INTO impressoras SET ?', [{ ...dados, ...cred.out }]);
     await monitor.recarregar();
     monitor.lerAgora(r.insertId);
     res.status(201).json({ id: r.insertId, mensagem: 'Impressora cadastrada' });
@@ -98,12 +127,10 @@ const criar = async (req, res) => {
 const atualizar = async (req, res) => {
   const { erro, dados } = lerCadastro(req.body);
   if (erro) return res.status(400).json({ erro });
-  // API key em branco na edição = manter a que já está gravada (a tela nunca a recebe).
-  // Para apagar de fato, a tela manda `remover_api_key`.
-  if (req.body.remover_api_key) dados.api_key = null;
-  else if (req.body.api_key?.trim()) dados.api_key = req.body.api_key.trim();
+  const cred = credenciais(req.body, dados, monitor.buscar(req.params.id));
+  if (cred.erro) return res.status(400).json({ erro: cred.erro });
   try {
-    const [r] = await db.query('UPDATE impressoras SET ? WHERE id = ? AND ativo = 1', [dados, req.params.id]);
+    const [r] = await db.query('UPDATE impressoras SET ? WHERE id = ? AND ativo = 1', [{ ...dados, ...cred.out }, req.params.id]);
     if (r.affectedRows === 0) return res.status(404).json({ erro: 'Impressora não encontrada' });
     await monitor.recarregar();
     monitor.lerAgora(req.params.id);
@@ -128,6 +155,9 @@ const excluir = async (req, res) => {
 const testar = async (req, res) => {
   const { erro, dados } = lerCadastro({ nome: 'teste', ...req.body });
   if (erro) return res.status(400).json({ erro });
+  if (dados.protocolo !== 'moonraker') {
+    return res.status(400).json({ erro: 'O teste de conexão desta marca chega junto com o suporte a ela' });
+  }
   let apiKey = req.body.api_key?.trim() || null;
   if (!apiKey && req.body.id && !req.body.remover_api_key) apiKey = monitor.buscar(req.body.id)?.api_key || null;
   try {
@@ -143,7 +173,8 @@ const comando = async (req, res) => {
   if (!imp) return res.status(404).json({ erro: 'Impressora não encontrada' });
   const adaptador = monitor.adaptadorDe(imp);
   const { acao, valor } = req.body;
-  if (!adaptador?.ACOES.includes(acao)) return res.status(400).json({ erro: 'Comando desconhecido' });
+  if (!adaptador) return res.status(400).json({ erro: 'O controle desta marca ainda não está disponível' });
+  if (!adaptador.ACOES.includes(acao)) return res.status(400).json({ erro: 'Comando desconhecido' });
 
   try {
     await adaptador.comandar(imp, acao, valor);
@@ -171,6 +202,7 @@ const CAMERA_TTL = '2m';
 const cameras = async (req, res) => {
   const imp = monitor.buscar(req.params.id);
   if (!imp) return res.status(404).json({ erro: 'Impressora não encontrada' });
+  if (!monitor.adaptadorDe(imp)) return res.status(400).json({ erro: 'A câmera desta marca ainda não está disponível' });
   try {
     const lista = await monitor.adaptadorDe(imp).cameras(imp);
     const token = jwt.sign({ camera: imp.id }, process.env.JWT_SECRET, { expiresIn: CAMERA_TTL });
@@ -197,7 +229,7 @@ const cameraProxy = (tipo) => async (req, res) => {
   }
 
   const imp = monitor.buscar(req.params.id);
-  if (!imp) return res.status(404).end();
+  if (!imp || !monitor.adaptadorDe(imp)) return res.status(404).end();
   let camera;
   try {
     camera = (await monitor.adaptadorDe(imp).cameras(imp))[Number(req.params.idx)];
