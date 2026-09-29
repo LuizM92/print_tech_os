@@ -23,6 +23,8 @@ const ESTADOS = {
 
 /** Estados em que a impressora não responde a comando nem tem câmera para abrir. */
 const SEM_CONEXAO = ['offline', 'sem_suporte'];
+const MODOS_VELOCIDADE = { 1: 'Silencioso', 2: 'Padrão', 3: 'Esporte', 4: 'Ludicrous' };
+
 const AGUARDANDO = { rotulo: 'Conectando…', classe: 'imp-ociosa' };
 
 const ROTULO_EVENTO = {
@@ -35,7 +37,7 @@ const ROTULO_EVENTO = {
 // é só uma linha aqui.
 const PROTOCOLOS = {
   moonraker: { porta: '7125', suportado: true },
-  bambu: { porta: '8883', suportado: false },
+  bambu: { porta: '8883', suportado: true },
   flashforge: { porta: '8898', suportado: false },
 };
 
@@ -281,13 +283,15 @@ function CartaoImpressora({ imp, admin, enviando, onComando, onConfirmar, onCame
         <span className="imp-estado">{est.rotulo}</span>
       </div>
 
-      {s?.mensagem && ['erro', 'offline', 'iniciando'].includes(s.estado) && (
+      {/* Na pausa também: a Bambu pausa sozinha por filamento, porta aberta... e diz por quê. */}
+      {s?.mensagem && ['erro', 'offline', 'iniciando', 'pausada'].includes(s.estado) && (
         <div className="imp-mensagem">{s.mensagem}</div>
       )}
 
       {job ? (
         <div className="imp-job">
           <div className="imp-arquivo" title={job.arquivo}>{nomeArquivo(job.arquivo)}</div>
+          {job.etapa && <div className="imp-etapa">{job.etapa}</div>}
           <div className="imp-barra"><div style={{ width: `${Math.min(100, job.progresso ?? 0)}%` }} /></div>
           <div className="imp-job-linha">
             <span className="font-mono">{job.progresso !== null ? `${Math.round(job.progresso)}%` : '—'}</span>
@@ -386,7 +390,7 @@ function ModalCadastro({ inicial, onFechar, onSalvo }) {
     setTeste({ ok: null, texto: 'Testando…' });
     try {
       const { data } = await api.post('/impressoras/testar', corpo());
-      setTeste({ ok: true, texto: `Conectou: ${data.nome} · Klipper ${data.versao} · ${data.estado}` });
+      setTeste({ ok: true, texto: `Conectou: ${data.nome} · ${data.versao} · ${data.estado}` });
     } catch (err) {
       setTeste({ ok: false, texto: err.response?.data?.erro || 'Não conectou' });
     }
@@ -615,6 +619,7 @@ function ModalControles({ imp, enviando, onComando, onConfirmar, onFechar }) {
       velocidade: s.velocidade_pct ?? 100,
       fluxo: s.fluxo_pct ?? 100,
       ventilador: s.ventilador_pct ?? 0,
+      modo_velocidade: s.modo_velocidade ?? 2,
     });
   }, [imp.status]);
 
@@ -634,13 +639,16 @@ function ModalControles({ imp, enviando, onComando, onConfirmar, onFechar }) {
   };
 
   const online = s.estado && !SEM_CONEXAO.includes(s.estado);
-  const linhas = [
+  // Cada adaptador diz o que a impressora aceita; leitura antiga sem a lista = Klipper.
+  const tem = (acao) => (s.controles || ['temperatura_bico', 'temperatura_mesa', 'velocidade', 'fluxo', 'ventilador', 'emergencia', 'reiniciar_firmware']).includes(acao);
+  const todasLinhas = [
     { acao: 'temperatura_bico', rotulo: 'Temperatura do bico', unidade: '°C', atual: fmtTemp(s.temperaturas?.bico), max: 350 },
     { acao: 'temperatura_mesa', rotulo: 'Temperatura da mesa', unidade: '°C', atual: fmtTemp(s.temperaturas?.mesa), max: 120 },
     { acao: 'velocidade', rotulo: 'Velocidade', unidade: '%', atual: s.velocidade_pct != null ? `${s.velocidade_pct}%` : '—', min: 10, max: 300 },
     { acao: 'fluxo', rotulo: 'Fluxo', unidade: '%', atual: s.fluxo_pct != null ? `${s.fluxo_pct}%` : '—', min: 50, max: 150 },
     { acao: 'ventilador', rotulo: 'Ventilador da peça', unidade: '%', atual: s.ventilador_pct != null ? `${s.ventilador_pct}%` : '—', max: 100 },
   ];
+  const linhas = todasLinhas.filter((l) => tem(l.acao));
 
   return (
     <Modal isOpen onClose={onFechar} title={`Controles — ${imp.nome}`} size="lg">
@@ -663,11 +671,39 @@ function ModalControles({ imp, enviando, onComando, onConfirmar, onFechar }) {
                 </div>
               </div>
             ))}
+            {tem('modo_velocidade') && (
+              <div className="imp-controle">
+                <label>Modo de velocidade <span className="text-muted">agora {MODOS_VELOCIDADE[s.modo_velocidade] || '—'}{s.velocidade_pct != null ? ` (${s.velocidade_pct}%)` : ''}</span></label>
+                <div className="flex gap-2 items-center">
+                  <select value={valores.modo_velocidade ?? 2} onChange={(e) => setValores({ ...valores, modo_velocidade: Number(e.target.value) })}>
+                    {Object.entries(MODOS_VELOCIDADE).map(([v, nome]) => <option key={v} value={v}>{nome}</option>)}
+                  </select>
+                  <button className="btn btn-ghost btn-sm" disabled={enviando === `${imp.id}:modo_velocidade`} onClick={() => aplicar('modo_velocidade')}>Aplicar</button>
+                </div>
+              </div>
+            )}
+            {tem('luz') && (
+              <div className="imp-controle">
+                <label>Luz da câmara <span className="text-muted">agora {s.luz === true ? 'acesa' : s.luz === false ? 'apagada' : '—'}</span></label>
+                <div className="flex gap-2 items-center">
+                  <button className="btn btn-ghost btn-sm" disabled={enviando === `${imp.id}:luz`} onClick={() => onComando('luz', 'on')}>Acender</button>
+                  <button className="btn btn-ghost btn-sm" disabled={enviando === `${imp.id}:luz`} onClick={() => onComando('luz', 'off')}>Apagar</button>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="flex gap-2 mt-4" style={{ flexWrap: 'wrap' }}>
-            <button className="btn btn-danger" onClick={() => onConfirmar('emergencia')}>Parada de emergência</button>
-            <button className="btn btn-ghost" onClick={() => onConfirmar('reiniciar_firmware')}>Reiniciar firmware</button>
-          </div>
+          {(tem('emergencia') || tem('reiniciar_firmware')) && (
+            <div className="flex gap-2 mt-4" style={{ flexWrap: 'wrap' }}>
+              {tem('emergencia') && <button className="btn btn-danger" onClick={() => onConfirmar('emergencia')}>Parada de emergência</button>}
+              {tem('reiniciar_firmware') && <button className="btn btn-ghost" onClick={() => onConfirmar('reiniciar_firmware')}>Reiniciar firmware</button>}
+            </div>
+          )}
+          {imp.protocolo === 'bambu' && (
+            <div className="imp-dica mt-4">
+              Na Bambu, pausar, cancelar e os ajustes só funcionam com a impressora em LAN Only + Modo
+              Desenvolvedor. Sem isso ela recusa o comando — leitura e câmera continuam normais.
+            </div>
+          )}
         </>
       )}
 

@@ -3,11 +3,12 @@ const jwt = require('jsonwebtoken');
 const db = require('../utils/db');
 const monitor = require('../utils/impressoras/monitor');
 const moonraker = require('../utils/impressoras/moonraker');
+const bambu = require('../utils/impressoras/bambu');
 
-// Bambu e Flashforge já podem ser cadastradas (com serial e código), mas ainda não têm
-// adaptador: o monitor as mostra como "sem suporte" até ele existir.
+// A Flashforge já pode ser cadastrada (com serial e código), mas ainda não tem
+// adaptador: o monitor a mostra como "sem suporte" até ele existir.
 const PROTOCOLOS = ['moonraker', 'bambu', 'flashforge'];
-const PORTA_PADRAO = { moonraker: moonraker.PORTA_PADRAO, bambu: 8883, flashforge: 8898 };
+const PORTA_PADRAO = { moonraker: moonraker.PORTA_PADRAO, bambu: bambu.PORTA_PADRAO, flashforge: 8898 };
 // Os dois falam com a impressora identificando-se pelo serial e por um código que
 // aparece na tela dela: o Access Code na Bambu, o código do modo LAN na Flashforge.
 const PEDE_SERIAL = ['bambu', 'flashforge'];
@@ -28,6 +29,13 @@ const ROTULO_ACAO = {
 const UNIDADE_ACAO = {
   temperatura_bico: ' °C', temperatura_mesa: ' °C', velocidade: '%', fluxo: '%', ventilador: '%',
 };
+
+/** Como o comando aparece no aviso da tela e no histórico. */
+function descreverComando(acao, valor) {
+  if (acao === 'modo_velocidade') return `Velocidade → ${bambu.MODOS_VELOCIDADE[valor] || valor}`;
+  if (acao === 'luz') return valor === 'on' ? 'Acendeu a luz' : 'Apagou a luz';
+  return UNIDADE_ACAO[acao] ? `${ROTULO_ACAO[acao]} ${valor}${UNIDADE_ACAO[acao]}` : ROTULO_ACAO[acao] || acao;
+}
 
 /** O cadastro como a tela vê: sem as credenciais, só se elas existem. */
 const publico = (imp) => ({
@@ -155,13 +163,21 @@ const excluir = async (req, res) => {
 const testar = async (req, res) => {
   const { erro, dados } = lerCadastro({ nome: 'teste', ...req.body });
   if (erro) return res.status(400).json({ erro });
-  if (dados.protocolo !== 'moonraker') {
+  const adaptador = monitor.adaptadorDe(dados);
+  if (!adaptador) {
     return res.status(400).json({ erro: 'O teste de conexão desta marca chega junto com o suporte a ela' });
   }
+  // Na edição, credencial em branco = a que está gravada (a tela não a conhece).
+  const gravada = req.body.id ? monitor.buscar(req.body.id) : null;
   let apiKey = req.body.api_key?.trim() || null;
-  if (!apiKey && req.body.id && !req.body.remover_api_key) apiKey = monitor.buscar(req.body.id)?.api_key || null;
+  if (!apiKey && !req.body.remover_api_key) apiKey = gravada?.api_key || null;
+  let codigo = req.body.codigo_acesso?.trim() || null;
+  if (!codigo && gravada?.protocolo === dados.protocolo) codigo = gravada.codigo_acesso;
+  if (PEDE_SERIAL.includes(dados.protocolo) && !codigo) {
+    return res.status(400).json({ erro: 'Informe o código de acesso para testar' });
+  }
   try {
-    const info = await moonraker.identificar({ ...dados, api_key: apiKey });
+    const info = await adaptador.identificar({ ...dados, api_key: apiKey, codigo_acesso: codigo });
     res.json(info);
   } catch (err) {
     res.status(502).json({ erro: monitor.motivoFalha(err) });
@@ -176,15 +192,20 @@ const comando = async (req, res) => {
   if (!adaptador) return res.status(400).json({ erro: 'O controle desta marca ainda não está disponível' });
   if (!adaptador.ACOES.includes(acao)) return res.status(400).json({ erro: 'Comando desconhecido' });
 
+  let resultado;
   try {
-    await adaptador.comandar(imp, acao, valor);
+    resultado = await adaptador.comandar(imp, acao, valor);
   } catch (err) {
     if (err.validacao) return res.status(400).json({ erro: err.message });
-    return res.status(502).json({ erro: `A impressora recusou: ${monitor.motivoFalha(err)}` });
+    // Na Bambu, a recusa costuma ser o Authorization Control — vale dizer o que fazer.
+    const dica = imp.protocolo === 'bambu' ? ' (controle por fora do app exige LAN Only + Modo Desenvolvedor)' : '';
+    return res.status(502).json({ erro: `A impressora recusou: ${monitor.motivoFalha(err)}${dica}` });
   }
 
   const status = monitor.estadoDe(imp.id);
-  const detalhe = UNIDADE_ACAO[acao] ? `${ROTULO_ACAO[acao]} ${valor}${UNIDADE_ACAO[acao]}` : ROTULO_ACAO[acao];
+  let detalhe = descreverComando(acao, valor);
+  // Enviado, mas a impressora não respondeu se aceitou (a Bambu nem sempre responde).
+  if (resultado?.confirmado === false) detalhe += ' (sem confirmação)';
   await monitor.registrarEvento(imp.id, {
     tipo: 'comando', arquivo: status?.job?.arquivo || null, detalhe,
   }, req.usuario.id);
@@ -236,8 +257,18 @@ const cameraProxy = (tipo) => async (req, res) => {
   } catch {
     return res.status(502).end();
   }
-  const url = camera?.[tipo];
-  if (!url) return res.status(404).end();
+  if (!camera?.[tipo]) return res.status(404).end();
+
+  // Câmera sem URL (Bambu: socket próprio na porta 6000) — o adaptador entrega direto.
+  const adaptador = monitor.adaptadorDe(imp);
+  if (adaptador.transmitir) {
+    try {
+      return await adaptador.transmitir(imp, tipo, req, res);
+    } catch {
+      return res.headersSent ? res.end() : res.status(502).end();
+    }
+  }
+  const url = camera[tipo];
 
   // Fechou o modal → derruba a conexão com a câmera também, senão o stream fica
   // puxando banda da impressora sem ninguém olhar.

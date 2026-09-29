@@ -10,8 +10,9 @@
 const db = require('../db');
 const { eventosDaTransicao } = require('./eventos');
 const moonraker = require('./moonraker');
+const bambu = require('./bambu');
 
-const ADAPTADORES = { moonraker };
+const ADAPTADORES = { moonraker, bambu };
 
 const INTERVALO_MS = 3000;
 // Uma leitura perdida não é impressora desligada: Wi-Fi oscila, o Klipper às vezes
@@ -32,9 +33,16 @@ function motivoFalha(err) {
   if (err.name === 'TimeoutError' || codigo === 'ETIMEDOUT' || codigo === 'UND_ERR_CONNECT_TIMEOUT') {
     return 'Sem resposta da impressora';
   }
-  if (codigo === 'ECONNREFUSED') return 'Conexão recusada — o Moonraker está no ar e nessa porta?';
-  if (codigo === 'EHOSTUNREACH' || codigo === 'ENETUNREACH') return 'Impressora fora de alcance na rede';
+  // O cliente MQTT (Bambu) põe o código direto no erro, não em `cause`.
+  const rede = codigo || err.code;
+  if (rede === 'ECONNREFUSED') return 'Conexão recusada — a impressora aceita conexões nessa porta?';
+  if (rede === 'EHOSTUNREACH' || rede === 'ENETUNREACH') return 'Impressora fora de alcance na rede';
   if (err.status === 401 || err.status === 403) return 'Acesso negado — confira a API key ou o trusted_clients';
+  // Recusa do MQTT: 4 = usuário/senha, 5 = não autorizado. Na Bambu, é o Access Code
+  // (ele muda quando o LAN Mode é desligado e religado).
+  if (err.code === 4 || err.code === 5 || /not authorized|bad user ?name or password/i.test(err.message)) {
+    return 'Access Code recusado — confira na tela da impressora';
+  }
   return err.message;
 }
 
@@ -45,6 +53,10 @@ async function recarregar() {
   const antigos = new Map(impressoras.map((i) => [i.id, i.protocolo]));
   const atuais = new Map(rows.map((i) => [i.id, i.protocolo]));
   impressoras = rows;
+  // Adaptador com conexão aberta (Bambu) fecha a de quem saiu do cadastro.
+  for (const [nome, adaptador] of Object.entries(ADAPTADORES)) {
+    adaptador.sincronizar?.(rows.filter((i) => i.protocolo === nome));
+  }
   for (const id of estados.keys()) {
     if (!atuais.has(id) || atuais.get(id) !== antigos.get(id)) estados.delete(id);
   }

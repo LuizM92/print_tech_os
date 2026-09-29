@@ -9,6 +9,8 @@
  * Referência: https://moonraker.readthedocs.io/en/latest/web_api/
  */
 
+const { num, arred, faixa, erroValidacao } = require('./comum');
+
 const PORTA_PADRAO = 7125;
 const TIMEOUT_MS = 4000;
 
@@ -45,8 +47,6 @@ async function chamar(imp, caminho, { metodo = 'GET', timeout = TIMEOUT_MS } = {
   return corpo.result;
 }
 
-const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-const arred = (v, casas = 1) => (v === null ? null : Math.round(v * 10 ** casas) / 10 ** casas);
 const temp = (h) => (h ? { atual: arred(num(h.temperature)), alvo: arred(num(h.target)) } : null);
 
 /**
@@ -114,6 +114,9 @@ function normalizar(status = {}, metadados = {}) {
     fluxo_pct: num(status.gcode_move?.extrude_factor) === null
       ? null : Math.round(status.gcode_move.extrude_factor * 100),
     ventilador_pct: num(status.fan?.speed) === null ? null : Math.round(status.fan.speed * 100),
+    // O que a janela de controles oferece. Cada adaptador diz o seu: a Bambu, por
+    // exemplo, tem modo de velocidade em vez de percentual, e não tem fluxo.
+    controles: Object.keys(COMANDOS),
   };
 }
 
@@ -159,21 +162,11 @@ async function consultar(imp) {
 /** Dados básicos, para o botão "Testar conexão" do cadastro. */
 async function identificar(imp) {
   const info = await chamar(imp, '/printer/info');
-  return { nome: info.hostname, versao: info.software_version, estado: info.state };
+  return { nome: info.hostname, versao: `Klipper ${info.software_version}`, estado: info.state };
 }
 
 // ─── Comandos ────────────────────────────────────────────────────────────────
 // Lista fechada: a tela não manda G-code livre. Cada ação valida o próprio valor.
-
-const faixa = (valor, min, max, oQue) => {
-  const n = Number(valor);
-  if (!Number.isFinite(n) || n < min || n > max) {
-    const erro = new Error(`${oQue} deve estar entre ${min} e ${max}`);
-    erro.validacao = true;
-    throw erro;
-  }
-  return Math.round(n);
-};
 
 const gcode = (imp, script) =>
   chamar(imp, `/printer/gcode/script?script=${encodeURIComponent(script)}`, { metodo: 'POST', timeout: 10000 });
@@ -195,11 +188,7 @@ const COMANDOS = {
 
 async function comandar(imp, acao, valor) {
   const executar = COMANDOS[acao];
-  if (!executar) {
-    const erro = new Error('Comando desconhecido');
-    erro.validacao = true;
-    throw erro;
-  }
+  if (!executar) throw erroValidacao('Comando desconhecido');
   await executar(imp, valor);
 }
 
