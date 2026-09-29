@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSidebar } from '../../contexts/SidebarContext';
+import { useNotificacoes } from '../../contexts/NotificacoesContext';
 import usePersistido from '../../hooks/usePersistido';
 import Icon from './Icon';
 
@@ -57,6 +58,7 @@ const classeItem = ({ isActive }) => `nav-item ${isActive ? 'active' : ''}`;
 export default function Sidebar() {
   const { usuario, logout, isAdmin } = useAuth();
   const { recolhida, menuMobileAberto, alternarRecolhida, fecharMenuMobile } = useSidebar();
+  const notificacoes = useNotificacoes();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -143,7 +145,28 @@ export default function Sidebar() {
         </button>
 
         <nav className="sidebar-nav" onScroll={() => setDica(null)}>
-          <div className="nav-section">{renderItem(INICIO)}</div>
+          <div className="nav-section">
+            {renderItem(INICIO)}
+            {/* O sino não é uma tela: abre o painel ao lado do menu. */}
+            <button
+              type="button"
+              className={`nav-item ${notificacoes.aberto ? 'active' : ''}`}
+              data-sino
+              onClick={() => { fecharMenuMobile(); notificacoes.alternar(); }}
+              aria-label={notificacoes.naoLidas ? `Notificações: ${notificacoes.naoLidas} não lidas` : 'Notificações'}
+              aria-expanded={notificacoes.aberto}
+              {...comDica(notificacoes.naoLidas ? `Notificações (${notificacoes.naoLidas})` : 'Notificações')}
+            >
+              <span className="nav-sino">
+                <Icon name="sino" />
+                {notificacoes.naoLidas > 0 && recolhida && <span className="sino-ponto" />}
+              </span>
+              <span className="nav-item-texto">Notificações</span>
+              {notificacoes.naoLidas > 0 && !recolhida && (
+                <span className="sino-contador nav-contador">{notificacoes.naoLidas > 99 ? '99+' : notificacoes.naoLidas}</span>
+              )}
+            </button>
+          </div>
 
           {grupos.map((grupo) => {
             // Recolhido em ícones não há cabeçalho para clicar, então todo grupo aparece aberto.

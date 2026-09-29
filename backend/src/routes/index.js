@@ -79,6 +79,7 @@ const notasCtrl = require('../controllers/notasFiscaisController');
 const arquivosCtrl = require('../controllers/arquivosOrcamentoController');
 const impressorasCtrl = require('../controllers/impressorasController');
 const alertasCtrl = require('../controllers/alertasController');
+const notificacoesCtrl = require('../controllers/notificacoesController');
 
 // Auth
 router.post('/auth/login', authCtrl.login);
@@ -163,6 +164,12 @@ router.post('/alertas/inscricao', autenticar, alertasCtrl.inscrever);
 router.delete('/alertas/inscricao', autenticar, alertasCtrl.cancelar);
 router.post('/alertas/situacao', autenticar, alertasCtrl.situacao);
 router.post('/alertas/teste', autenticar, alertasCtrl.teste);
+
+// Notificações do sino — da farm para todos; o "lida" é de cada usuário.
+// /lidas vem antes de /:id/lida só por clareza: os caminhos não colidem.
+router.get('/notificacoes', autenticar, notificacoesCtrl.listar);
+router.post('/notificacoes/lidas', autenticar, notificacoesCtrl.marcarTodas);
+router.post('/notificacoes/:id/lida', autenticar, notificacoesCtrl.marcarLida);
 
 // Orçamentos — compartilhado pelos dois tipos (impressão e venda)
 // /resumo vem antes de /:id — senão o Express trata 'resumo' como um id.

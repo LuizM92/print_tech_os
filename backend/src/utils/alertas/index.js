@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const webpush = require('web-push');
 const db = require('../db');
 const { montarAlerta, alertaOffline, alertaVoltou } = require('./regras');
+const notificacoes = require('../notificacoes');
 
 const QUEDA_MINUTOS = 3;
 // Pausa que chega até este tempo depois de alguém clicar "Pausar" no sistema é a pausa
@@ -122,8 +123,11 @@ function registrarComando(impressoraId, acao) {
   if (acao === 'pausar') ultimaPausaPedida.set(impressoraId, Date.now());
 }
 
-const disparar = (alerta) => {
-  if (alerta) enviar(alerta).catch((err) => console.error(`[alertas] ${err.message}`));
+/** Todo alerta vai para o sino (todos veem) e por push (quem ativou no aparelho). */
+const disparar = (alerta, imp) => {
+  if (!alerta) return;
+  notificacoes.registrar(alerta, { impressoraId: imp.id });
+  enviar(alerta).catch((err) => console.error(`[alertas] ${err.message}`));
 };
 
 /**
@@ -136,7 +140,7 @@ function aoEvento(imp, ev, ctx = {}) {
     const timer = setTimeout(() => {
       const q = quedas.get(imp.id);
       if (q) q.avisou = true;
-      disparar(alertaOffline(imp, { arquivo: ev.arquivo, numeroOs: ctx.numeroOs, minutos: QUEDA_MINUTOS }));
+      disparar(alertaOffline(imp, { arquivo: ev.arquivo, numeroOs: ctx.numeroOs, minutos: QUEDA_MINUTOS }), imp);
     }, QUEDA_MINUTOS * 60 * 1000);
     timer.unref?.();
     quedas.set(imp.id, { timer, avisou: false });
@@ -148,14 +152,14 @@ function aoEvento(imp, ev, ctx = {}) {
     if (!q) return;
     clearTimeout(q.timer);
     quedas.delete(imp.id);
-    if (q.avisou) disparar(alertaVoltou(imp));
+    if (q.avisou) disparar(alertaVoltou(imp), imp);
     return;
   }
 
   const pedidaEm = ultimaPausaPedida.get(imp.id);
   const pausaPedida = !!pedidaEm && Date.now() - pedidaEm < JANELA_PAUSA_PEDIDA_MS;
   if (ev.tipo === 'pausada') ultimaPausaPedida.delete(imp.id);
-  disparar(montarAlerta(imp, ev, { ...ctx, pausaPedida }));
+  disparar(montarAlerta(imp, ev, { ...ctx, pausaPedida }), imp);
 }
 
 module.exports = { chaves, inscrever, cancelar, inscrito, enviar, registrarComando, aoEvento };

@@ -36,6 +36,7 @@ function montarAlerta(imp, ev, ctx = {}) {
 
   if (ev.tipo === 'concluida') {
     return {
+      tipo: 'concluida',
       titulo: `${imp.nome} terminou`,
       corpo: juntar(numeroOs, arquivo, fmtDuracao(ev.duracao_s)) || 'Impressão concluída',
       tag,
@@ -45,6 +46,7 @@ function montarAlerta(imp, ev, ctx = {}) {
 
   if (ev.tipo === 'erro') {
     return {
+      tipo: 'erro',
       titulo: arquivo ? `${imp.nome}: a impressão falhou` : `${imp.nome} com erro`,
       corpo: juntar(ev.detalhe || atual?.mensagem, numeroOs, arquivo) || 'Erro sem descrição',
       tag,
@@ -56,6 +58,7 @@ function montarAlerta(imp, ev, ctx = {}) {
     // Pausa pedida pela tela do sistema não é surpresa para ninguém.
     if (pausaPedida) return null;
     return {
+      tipo: 'pausada',
       titulo: `${imp.nome} pausou`,
       corpo: juntar(atual?.job?.etapa || atual?.mensagem || 'Sem motivo informado', numeroOs, arquivo),
       tag,
@@ -68,6 +71,7 @@ function montarAlerta(imp, ev, ctx = {}) {
 
 function alertaOffline(imp, { arquivo, numeroOs, minutos }) {
   return {
+    tipo: 'offline',
     titulo: `${imp.nome} caiu da rede`,
     corpo: juntar(
       `Sem resposta há ${minutos} min no meio da impressão`,
@@ -81,6 +85,7 @@ function alertaOffline(imp, { arquivo, numeroOs, minutos }) {
 
 function alertaVoltou(imp) {
   return {
+    tipo: 'online',
     titulo: `${imp.nome} voltou à rede`,
     corpo: 'Confira se a impressão continuou',
     tag: `impressora-${imp.id}`,

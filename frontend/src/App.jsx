@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SidebarProvider, useSidebar } from './contexts/SidebarContext';
+import { NotificacoesProvider } from './contexts/NotificacoesContext';
+import PainelNotificacoes from './components/shared/PainelNotificacoes';
 import Sidebar from './components/shared/Sidebar';
 import BarraMobile from './components/shared/BarraMobile';
 import Login from './pages/Login';
@@ -44,6 +46,7 @@ function AppLayout({ children }) {
         <BarraMobile />
         {children}
       </main>
+      <PainelNotificacoes />
     </div>
   );
 }
@@ -84,7 +87,9 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <SidebarProvider>
-          <AppRoutes />
+          <NotificacoesProvider>
+            <AppRoutes />
+          </NotificacoesProvider>
         </SidebarProvider>
         <Toaster
           position="top-right"
