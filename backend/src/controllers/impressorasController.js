@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../utils/db');
 const monitor = require('../utils/impressoras/monitor');
 const impressoes = require('../utils/impressoras/impressoes');
+const alertas = require('../utils/alertas');
 const moonraker = require('../utils/impressoras/moonraker');
 const bambu = require('../utils/impressoras/bambu');
 const flashforge = require('../utils/impressoras/flashforge');
@@ -126,7 +127,6 @@ function lerCadastro(body) {
       porta,
       serial,
       url_camera: protocolo === 'moonraker' ? body.url_camera?.trim() || null : null,
-      ordem: parseInt(body.ordem, 10) || 0,
     },
   };
 }
@@ -155,12 +155,40 @@ const criar = async (req, res) => {
   const cred = credenciais(req.body, dados, null);
   if (cred.erro) return res.status(400).json({ erro: cred.erro });
   try {
-    const [r] = await db.query('INSERT INTO impressoras SET ?', [{ ...dados, ...cred.out }]);
+    // A ordem na tela se ajusta arrastando; a impressora nova entra no fim.
+    const [[{ ultima }]] = await db.query('SELECT COALESCE(MAX(ordem), 0) AS ultima FROM impressoras WHERE ativo = 1');
+    const [r] = await db.query('INSERT INTO impressoras SET ?', [{ ...dados, ...cred.out, ordem: ultima + 10 }]);
     await monitor.recarregar();
     monitor.lerAgora(r.insertId);
     res.status(201).json({ id: r.insertId, mensagem: 'Impressora cadastrada' });
   } catch (err) {
     res.status(500).json({ erro: 'Erro interno do servidor' });
+  }
+};
+
+/**
+ * Nova ordem de exibição, vinda do arrastar na tela: a lista completa de ids, na ordem
+ * nova. Grava de 10 em 10 — sobra espaço, e a ordem é da lista, não de um número digitado.
+ */
+const reordenar = async (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.map(Number) : [];
+  if (!ids.length || ids.some((id) => !Number.isInteger(id) || id <= 0) || new Set(ids).size !== ids.length) {
+    return res.status(400).json({ erro: 'Lista de impressoras inválida' });
+  }
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    for (const [i, id] of ids.entries()) {
+      await conn.query('UPDATE impressoras SET ordem = ? WHERE id = ? AND ativo = 1', [(i + 1) * 10, id]);
+    }
+    await conn.commit();
+    await monitor.recarregar();
+    res.json({ mensagem: 'Ordem salva' });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ erro: 'Erro interno do servidor' });
+  } finally {
+    conn.release();
   }
 };
 
@@ -224,6 +252,7 @@ const comando = async (req, res) => {
   if (!adaptador) return res.status(400).json({ erro: 'O controle desta marca ainda não está disponível' });
   if (!adaptador.ACOES.includes(acao)) return res.status(400).json({ erro: 'Comando desconhecido' });
 
+  alertas.registrarComando(imp.id, acao);
   let resultado;
   try {
     resultado = await adaptador.comandar(imp, acao, valor);
@@ -324,6 +353,7 @@ const cameraProxy = (tipo) => async (req, res) => {
 module.exports = {
   listar,
   vincular,
+  reordenar,
   eventos,
   criar,
   atualizar,

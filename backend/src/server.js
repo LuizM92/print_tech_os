@@ -16,6 +16,13 @@ app.use(express.urlencoded({ extended: true }));
 
 // --- Configuração para servir o Frontend no Docker ---
 // No Dockerfile que criamos, a pasta 'build' está na raiz do backend
+// O service worker dos alertas não pode ficar preso em cache (nem no navegador nem no
+// Cloudflare): a versão nova precisa chegar no próximo acesso.
+app.get('/sw-alertas.js', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, '../build/sw-alertas.js'));
+});
+
 app.use(express.static(path.join(__dirname, '../build')));
 
 app.get('/health', (req, res) => res.json({ status: 'OK', timestamp: new Date() }));

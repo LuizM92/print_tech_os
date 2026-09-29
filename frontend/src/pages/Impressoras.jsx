@@ -4,6 +4,8 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import Modal, { ConfirmModal } from '../components/shared/Modal';
 import Icon from '../components/shared/Icon';
+import AlertasAparelho from '../components/shared/AlertasAparelho';
+import usePersistido from '../hooks/usePersistido';
 import toast from 'react-hot-toast';
 import { fmtDataHora } from '../utils/format';
 
@@ -59,9 +61,30 @@ const modeloPorId = (id) => MODELOS.find((m) => m.id === id) || OUTRA;
 const modeloDoCadastro = (imp) =>
   MODELOS.find((m) => m.marca === imp.marca && m.modelo === imp.modelo && m.protocolo === imp.protocolo) || OUTRA;
 
+// Ordem dos grupos na tela: as marcas da farm primeiro, o resto em ordem alfabética.
+const ORDEM_MARCAS = ['Creality', 'Elegoo', 'Flashforge', 'Bambu Lab'];
+const SEM_MARCA = 'Outras';
+
+/** Separa a lista (já na ordem de exibição) em grupos por marca. */
+function agruparPorMarca(lista) {
+  const grupos = new Map();
+  for (const imp of lista) {
+    const marca = imp.marca?.trim() || SEM_MARCA;
+    if (!grupos.has(marca)) grupos.set(marca, []);
+    grupos.get(marca).push(imp);
+  }
+  const peso = (m) => {
+    const i = ORDEM_MARCAS.indexOf(m);
+    return i >= 0 ? i : m === SEM_MARCA ? 999 : 100;
+  };
+  return [...grupos.entries()]
+    .sort(([a], [b]) => peso(a) - peso(b) || a.localeCompare(b))
+    .map(([marca, impressoras]) => ({ marca, impressoras }));
+}
+
 const FORM_VAZIO = {
   tipo: 'k1c', nome: '', marca: '', modelo: '', host: '', porta: '7125',
-  api_key: '', url_camera: '', serial: '', codigo_acesso: '', ordem: '0',
+  api_key: '', url_camera: '', serial: '', codigo_acesso: '',
 };
 
 /** 1h 23min · 12min · <1min */
@@ -102,6 +125,11 @@ export default function Impressoras() {
   const [controlesDe, setControlesDe] = useState(null);
   const [removerId, setRemoverId] = useState(null);
   const [vinculandoDe, setVinculandoDe] = useState(null);
+  // Arrastar: a ordem nova vale na tela enquanto arrasta e até o servidor confirmar —
+  // senão a atualização a cada 3 s puxaria o cartão de volta para o lugar antigo.
+  const [arrastando, setArrastando] = useState(null);
+  const [ordemLocal, setOrdemLocal] = useState(null);
+  const [gruposFechados, setGruposFechados] = usePersistido('pt.impressoras.gruposFechados', {});
 
   const carregar = useCallback(async () => {
     try {
@@ -165,6 +193,46 @@ export default function Impressoras() {
   };
 
   const contagem = (estados) => lista.filter((i) => estados.includes(i.status?.estado)).length;
+
+  const exibida = ordemLocal
+    ? [...lista].sort((a, b) => ordemLocal.indexOf(a.id) - ordemLocal.indexOf(b.id))
+    : lista;
+  const grupos = agruparPorMarca(exibida);
+  const admin = isAdmin();
+
+  /** Passando por cima de outro cartão do mesmo grupo, o arrastado toma o lugar dele. */
+  const arrastarSobre = (alvo) => (e) => {
+    const origem = exibida.find((i) => i.id === arrastando);
+    if (!origem || origem.id === alvo.id || (origem.marca?.trim() || SEM_MARCA) !== (alvo.marca?.trim() || SEM_MARCA)) return;
+    e.preventDefault();
+    const ids = exibida.map((i) => i.id).filter((id) => id !== origem.id);
+    const posAlvo = ids.indexOf(alvo.id);
+    const antes = exibida.findIndex((i) => i.id === origem.id) > exibida.findIndex((i) => i.id === alvo.id);
+    ids.splice(antes ? posAlvo : posAlvo + 1, 0, origem.id);
+    setOrdemLocal(ids);
+  };
+
+  const soltar = async (e) => {
+    e.preventDefault();
+    setArrastando(null);
+    if (!ordemLocal) return;
+    try {
+      await api.put('/impressoras/ordem', { ids: ordemLocal });
+      await carregar();
+    } catch (err) {
+      toast.error(err.response?.data?.erro || 'Erro ao salvar a ordem');
+    } finally {
+      setOrdemLocal(null);
+    }
+  };
+
+  // Soltou fora de um cartão: nada muda.
+  const fimDoArraste = () => {
+    if (arrastando !== null) {
+      setArrastando(null);
+      setOrdemLocal(null);
+    }
+  };
   const controlando = lista.find((i) => i.id === controlesDe);
 
   return (
@@ -174,6 +242,7 @@ export default function Impressoras() {
         <p>Estado da farm ao vivo — atualiza a cada {INTERVALO_MS / 1000} segundos</p>
       </div>
       <div className="page-content">
+        <AlertasAparelho />
         <div className="stats-grid">
           <div className="stat-card"><div className="stat-label">Imprimindo</div><div className="stat-value accent">{contagem(['imprimindo'])}</div></div>
           <div className="stat-card"><div className="stat-label">Pausadas</div><div className="stat-value warning">{contagem(['pausada'])}</div></div>
@@ -183,7 +252,7 @@ export default function Impressoras() {
 
         {isAdmin() && (
           <div className="toolbar">
-            <div />
+            <span className="imp-dica">Arraste os cartões para mudar a ordem dentro de cada marca.</span>
             <button className="btn btn-primary" onClick={() => setCadastro({ form: FORM_VAZIO })}>
               <Icon name="mais" /> Nova impressora
             </button>
@@ -201,12 +270,41 @@ export default function Impressoras() {
             </div>
           </div>
         ) : (
+          grupos.map(({ marca, impressoras }) => {
+            const fechado = !!gruposFechados[marca];
+            const rodando = impressoras.filter((i) => ['imprimindo', 'pausada'].includes(i.status?.estado)).length;
+            const problema = impressoras.filter((i) => ['erro', 'offline'].includes(i.status?.estado)).length;
+            return (
+              <section key={marca} className="imp-grupo">
+                <button
+                  type="button"
+                  className={`imp-grupo-cabecalho ${fechado ? 'fechado' : ''}`}
+                  onClick={() => setGruposFechados((g) => ({ ...g, [marca]: !g[marca] }))}
+                  aria-expanded={!fechado}
+                >
+                  <Icon name="chevron" />
+                  <strong>{marca}</strong>
+                  <span className="text-muted">
+                    {impressoras.length} impressora{impressoras.length === 1 ? '' : 's'}
+                    {rodando > 0 && ` · ${rodando} imprimindo`}
+                  </span>
+                  {problema > 0 && <span className="imp-grupo-alerta">{problema} com problema</span>}
+                </button>
+                {!fechado && (
           <div className="imp-grid">
-            {lista.map((imp) => (
-              <CartaoImpressora
+            {impressoras.map((imp) => (
+              <div
                 key={imp.id}
+                className={`imp-arrastavel ${admin ? 'pode' : ''} ${arrastando === imp.id ? 'arrastando' : ''}`}
+                draggable={admin}
+                onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setArrastando(imp.id); }}
+                onDragOver={arrastarSobre(imp)}
+                onDrop={soltar}
+                onDragEnd={fimDoArraste}
+              >
+              <CartaoImpressora
                 imp={imp}
-                admin={isAdmin()}
+                admin={admin}
                 enviando={enviando}
                 onComando={(acao) => comandar(imp, acao)}
                 onConfirmar={(acao) => pedirConfirmacao(imp, acao)}
@@ -222,14 +320,19 @@ export default function Impressoras() {
                     tipo: modeloDoCadastro(imp).id,
                     nome: imp.nome, marca: imp.marca || '', modelo: imp.modelo || '', host: imp.host,
                     porta: String(imp.porta || ''), url_camera: imp.url_camera || '',
-                    serial: imp.serial || '', ordem: String(imp.ordem || 0),
+                    serial: imp.serial || '',
                   },
                 })}
                 onRemover={() => setRemoverId(imp.id)}
                 onVincular={() => setVinculandoDe(imp.id)}
               />
+              </div>
             ))}
           </div>
+                )}
+              </section>
+            );
+          })
         )}
       </div>
 
@@ -480,15 +583,9 @@ function ModalCadastro({ inicial, onFechar, onSalvo }) {
           </div>
         )}
 
-        <div className="form-row">
-          <div className="form-group">
-            <label>Nome</label>
-            <input value={form.nome} onChange={f('nome')} placeholder={`Ex: ${tipo.modelo || 'K1C'}-01`} required />
-          </div>
-          <div className="form-group">
-            <label>Ordem na tela</label>
-            <input type="number" value={form.ordem} onChange={f('ordem')} />
-          </div>
+        <div className="form-group">
+          <label>Nome</label>
+          <input value={form.nome} onChange={f('nome')} placeholder={`Ex: ${tipo.modelo || 'K1C'}-01`} required />
         </div>
 
         <div className="form-row">

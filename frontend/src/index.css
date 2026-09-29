@@ -1000,6 +1000,30 @@ textarea { resize: vertical; min-height: 90px; }
 }
 
 /* Impressoras — monitor da farm */
+.alertas-aparelho {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px; margin-bottom: 16px; border-radius: var(--radius);
+  background: var(--bg-card); border: 1px solid var(--border); font-size: 13px; color: var(--text-secondary);
+}
+.alertas-aparelho.ativo { border-color: rgba(22, 219, 147, 0.3); }
+.alertas-aparelho > span { flex: 1; min-width: 220px; }
+
+.imp-grupo { margin-bottom: 24px; }
+.imp-grupo-cabecalho {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 2px; margin-bottom: 12px;
+  background: none; border: none; border-bottom: 1px solid var(--border);
+  color: var(--text-primary); font-family: var(--font); font-size: 14px; cursor: pointer; text-align: left;
+}
+.imp-grupo-cabecalho svg { width: 14px; height: 14px; color: var(--text-muted); transition: transform 0.2s ease; }
+.imp-grupo-cabecalho.fechado svg { transform: rotate(-90deg); }
+.imp-grupo-cabecalho .text-muted { font-size: 12px; }
+.imp-grupo-alerta { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--danger); }
+
+.imp-arrastavel { display: flex; min-width: 0; }
+.imp-arrastavel > .imp-card { flex: 1; }
+.imp-arrastavel.pode .imp-topo { cursor: grab; }
+.imp-arrastavel.arrastando { opacity: 0.4; }
+
 .imp-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

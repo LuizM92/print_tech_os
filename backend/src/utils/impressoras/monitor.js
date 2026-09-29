@@ -10,6 +10,7 @@
 const db = require('../db');
 const { eventosDaTransicao } = require('./eventos');
 const impressoes = require('./impressoes');
+const alertas = require('../alertas');
 const moonraker = require('./moonraker');
 const bambu = require('./bambu');
 const flashforge = require('./flashforge');
@@ -105,7 +106,12 @@ async function ler(imp) {
     // A impressora pode ter sido removida enquanto a leitura estava no ar.
     if (!impressoras.some((i) => i.id === imp.id)) return;
     estados.set(imp.id, atual);
-    for (const ev of eventosDaTransicao(anterior, atual)) await registrarEvento(imp.id, ev);
+    for (const ev of eventosDaTransicao(anterior, atual)) {
+      await registrarEvento(imp.id, ev);
+      // Antes de sincronizar as impressões: a que está terminando ainda é a "atual", e
+      // o alerta sai com a OS dela.
+      alertas.aoEvento(imp, ev, { anterior, atual, numeroOs: impressoes.atualDe(imp.id, atual)?.numero_os });
+    }
     // A impressão como registro (e o vínculo com a OS) segue a mesma leitura.
     await impressoes.sincronizar(imp, atual);
   } finally {

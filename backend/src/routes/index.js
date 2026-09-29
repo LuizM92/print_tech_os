@@ -78,6 +78,7 @@ const configCtrl = require('../controllers/configuracoesController');
 const notasCtrl = require('../controllers/notasFiscaisController');
 const arquivosCtrl = require('../controllers/arquivosOrcamentoController');
 const impressorasCtrl = require('../controllers/impressorasController');
+const alertasCtrl = require('../controllers/alertasController');
 
 // Auth
 router.post('/auth/login', authCtrl.login);
@@ -144,6 +145,8 @@ router.get('/producao/:id/impressoes', autenticar, producaoCtrl.impressoesDaOs);
 router.get('/impressoras', autenticar, impressorasCtrl.listar);
 router.post('/impressoras/testar', autenticar, apenasAdmin, impressorasCtrl.testar);
 router.post('/impressoras', autenticar, apenasAdmin, impressorasCtrl.criar);
+// /ordem antes de /:id pelo mesmo motivo. A ordem vale para todo mundo, então é do admin.
+router.put('/impressoras/ordem', autenticar, apenasAdmin, impressorasCtrl.reordenar);
 router.put('/impressoras/:id', autenticar, apenasAdmin, impressorasCtrl.atualizar);
 router.delete('/impressoras/:id', autenticar, apenasAdmin, impressorasCtrl.excluir);
 router.get('/impressoras/:id/eventos', autenticar, impressorasCtrl.eventos);
@@ -153,6 +156,13 @@ router.get('/impressoras/:id/cameras', autenticar, impressorasCtrl.cameras);
 // Sem `autenticar`: o <img> não manda header. O token curto vem na URL (ver o controller).
 router.get('/impressoras/:id/camera/:idx/stream', impressorasCtrl.cameraStream);
 router.get('/impressoras/:id/camera/:idx/snapshot', impressorasCtrl.cameraSnapshot);
+
+// Alertas da farm (Web Push) — cada usuário ativa nos próprios aparelhos.
+router.get('/alertas/chave', autenticar, alertasCtrl.chave);
+router.post('/alertas/inscricao', autenticar, alertasCtrl.inscrever);
+router.delete('/alertas/inscricao', autenticar, alertasCtrl.cancelar);
+router.post('/alertas/situacao', autenticar, alertasCtrl.situacao);
+router.post('/alertas/teste', autenticar, alertasCtrl.teste);
 
 // Orçamentos — compartilhado pelos dois tipos (impressão e venda)
 // /resumo vem antes de /:id — senão o Express trata 'resumo' como um id.
