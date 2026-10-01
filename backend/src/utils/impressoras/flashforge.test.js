@@ -1,6 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { normalizar, tempoRestante } = require('./flashforge');
+const { normalizar, tempoRestante, serialDaApi } = require('./flashforge');
+
+test('serial vai para a API com o prefixo SN, como a impressora espera', () => {
+  assert.strictEqual(serialDaApi('MQQE9411305'), 'SNMQQE9411305'); // como aparece na tela
+  assert.strictEqual(serialDaApi('SNMQQE9411305'), 'SNMQQE9411305'); // já completo
+  assert.strictEqual(serialDaApi(' snMQQE9411305 '), 'SNMQQE9411305');
+});
 
 // `detail` como a AD5X responde, cortado ao que o monitor usa.
 const imprimindo = {

@@ -33,11 +33,21 @@ const ETAPAS = {
   calibrate_doing: 'Calibrando',
 };
 
+/**
+ * A API quer o serial com o prefixo "SN" (SNMQQE9411305), mas a tela e a etiqueta da
+ * impressora mostram sem ele — e é assim que as pessoas digitam no cadastro. Sem o
+ * prefixo, a impressora recusa com "SN is different".
+ */
+const serialDaApi = (serial) => {
+  const s = String(serial || '').trim();
+  return /^sn/i.test(s) ? `SN${s.slice(2)}` : `SN${s}`;
+};
+
 async function chamar(imp, caminho, extra = {}) {
   const res = await fetch(`http://${imp.host}:${imp.porta || PORTA_PADRAO}${caminho}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ serialNumber: imp.serial, checkCode: imp.codigo_acesso, ...extra }),
+    body: JSON.stringify({ serialNumber: serialDaApi(imp.serial), checkCode: imp.codigo_acesso, ...extra }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   const corpo = await res.json().catch(() => null);
@@ -166,6 +176,7 @@ async function cameras(imp) {
 
 module.exports = {
   PORTA_PADRAO,
+  serialDaApi,
   ACOES: Object.keys(COMANDOS),
   normalizar,
   tempoRestante,
