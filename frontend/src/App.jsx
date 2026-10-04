@@ -22,6 +22,9 @@ import FabricacaoProdutos from './pages/FabricacaoProdutos';
 import Producao from './pages/Producao';
 import DetalheOrcamento from './pages/DetalheOrcamento';
 import Impressoras from './pages/Impressoras';
+import ContasReceber from './pages/ContasReceber';
+import ContasPagar from './pages/ContasPagar';
+import Fornecedores from './pages/Fornecedores';
 import Configuracoes from './pages/Configuracoes';
 import './index.css';
 
@@ -75,6 +78,9 @@ function AppRoutes() {
       <Route path="/producao" element={<PrivateRoute><AppLayout><Producao /></AppLayout></PrivateRoute>} />
       <Route path="/impressoras" element={<PrivateRoute><AppLayout><Impressoras /></AppLayout></PrivateRoute>} />
       <Route path="/fabricacao/produtos" element={<PrivateRoute><AppLayout><FabricacaoProdutos /></AppLayout></PrivateRoute>} />
+      <Route path="/receber" element={<PrivateRoute><AppLayout><ContasReceber /></AppLayout></PrivateRoute>} />
+      <Route path="/pagar" element={<PrivateRoute adminOnly><AppLayout><ContasPagar /></AppLayout></PrivateRoute>} />
+      <Route path="/fornecedores" element={<PrivateRoute adminOnly><AppLayout><Fornecedores /></AppLayout></PrivateRoute>} />
       <Route path="/usuarios" element={<PrivateRoute adminOnly><AppLayout><Usuarios /></AppLayout></PrivateRoute>} />
       <Route path="/configuracoes" element={<PrivateRoute><AppLayout><Configuracoes /></AppLayout></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" />} />

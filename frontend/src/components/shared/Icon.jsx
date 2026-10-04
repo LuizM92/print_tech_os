@@ -32,6 +32,10 @@ const CAMINHOS = {
   recolher: 'M15 19l-7-7 7-7',
   menu: 'M4 6h16M4 12h16M4 18h16',
   fechar: 'M6 18L18 6M6 6l12 12',
+  receber: 'M15 13l-3 3m0 0l-3-3m3 3V8m9 4a9 9 0 11-18 0 9 9 0 0118 0z',
+  pagar: 'M9 11l3-3m0 0l3 3m-3-3v8m9-4a9 9 0 11-18 0 9 9 0 0118 0z',
+  fornecedor: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
+  dinheiro: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z',
 };
 
 export default function Icon({ name }) {

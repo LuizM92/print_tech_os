@@ -9,6 +9,7 @@ import {
 } from '../utils/format';
 import { ConfirmModal } from '../components/shared/Modal';
 import ImpressoesDaOs from '../components/shared/ImpressoesDaOs';
+import CobrancaDoOrcamento from '../components/financeiro/CobrancaDoOrcamento';
 
 const STATUS_OPTIONS = ['rascunho', 'aprovado', 'reprovado', 'cancelado'];
 
@@ -581,6 +582,8 @@ export default function DetalheOrcamento() {
                     : 'Anexar arquivo')}
               </button>
             </form>
+
+            <CobrancaDoOrcamento orc={orc} onMudou={carregar} />
 
             <h3 style={tituloCard}>Nota fiscal</h3>
             <form onSubmit={salvarNotaFiscal} style={{ marginBottom: 16 }}>

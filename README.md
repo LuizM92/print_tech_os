@@ -218,6 +218,87 @@ A mesma etapa aparece (e pode ser mudada) na tela de detalhe da OS, no card de s
 
 ---
 
+## Contas a receber e a pagar
+
+O financeiro tem dois lados na mesma estrutura: **A receber** (o que os clientes devem) e
+**A pagar** (as despesas do negócio). Cada linha é uma **parcela** com vencimento, valor,
+o que já entrou e o que foi dado de desconto.
+
+### Cobrança de uma OS / Pedido
+
+Aprovar não cobra sozinho. Na OS ou no Pedido aprovado, o card **Cobrança** tem o botão
+**Gerar cobrança**, que sugere as formas já calculadas com as mesmas contas do PDF:
+
+| Forma | Parcelas |
+|---|---|
+| Entrada de 30% + saldo | entrada vence no dia; saldo na previsão de entrega (ou em 15 dias) |
+| 3x sem juros | só aparece acima de R$ 300, como no PDF; uma parcela por mês |
+| À vista | uma parcela, vencendo no dia |
+
+Valor e vencimento de cada parcela podem ser ajustados no modal, mas **a soma precisa
+fechar com o total até o centavo** — o botão só libera quando fecha. Só se gera uma vez:
+para refazer, cancele as parcelas atuais.
+
+O orçamento pode ser editado depois de aprovado, e a cobrança **nunca é refeita sozinha**.
+Se o total mudar, o card mostra o aviso "o total não fecha com a cobrança" com a diferença.
+
+Tirar a OS de "aprovado" (reprovar, cancelar, voltar a rascunho) é barrado se já houver
+dinheiro recebido — o estorno é decisão explícita, em A receber. Com parcelas só em
+aberto, elas são canceladas junto e o histórico registra.
+
+### Receber, pagar e descontar
+
+- **Registrar recebimento** aceita valor parcial (a parcela fica *Parcial*), desconto e a
+  forma (PIX, boleto, cartão, dinheiro, transferência, outro). A parcela quita quando
+  *recebido + desconto* alcançam o valor. Receber a mais é aceito, para cobrir juros.
+- **O desconto do PIX (5%) é dado na baixa**, não na cobrança: a cobrança fica pelo valor
+  cheio e um atalho no modal preenche o desconto. Assim as parcelas sempre fecham com o
+  total da OS.
+- Cada baixa grava no histórico da OS. **Estornar** um pagamento reabre a parcela.
+- Duas baixas ao mesmo tempo (clique duplo) não passam: a parcela é travada na transação.
+
+### Situação é derivada, e "hoje" é o de Brasília
+
+O banco guarda só `aberto`, `pago` ou `cancelado`. **Vencida** e **vence hoje** são
+calculadas na consulta, nunca gravadas — nenhuma rotina precisa virar status à meia-noite.
+
+O servidor roda em UTC (o `docker-compose.yml` não define `TZ`), e das 21h à meia-noite no
+Brasil o dia dele já é o seguinte. Por isso o "hoje" vem de `hojeBR()`
+(`utils/financeiro/datas.js`) e os vencimentos trafegam como texto `AAAA-MM-DD`; nada usa
+`CURDATE()` nem converte data por `Date`.
+
+### Telas e permissões
+
+| | Administrador | Operador |
+|---|---|---|
+| A receber: ver, gerar cobrança, lançar avulso, registrar recebimento, mudar vencimento | ✅ | ✅ |
+| Alterar o valor de uma parcela (sem recebimento), estornar, cancelar | ✅ | ❌ |
+| A pagar, Fornecedores, categorias de despesa | ✅ | ❌ |
+
+As rotas `/api/pagar`, `/api/fornecedores` e `/api/categorias-despesa` são do admin
+inclusive para leitura, e `/api/receber` nunca alcança uma conta a pagar (nem o contrário).
+
+No **Dashboard**, a faixa *Financeiro — hoje* mostra o que há a receber, o vencido e o
+recebido no mês; o admin vê também a pagar, o pago no mês e o saldo. Ela não obedece aos
+filtros de orçamento, porque fala do agora.
+
+### Aviso de vencimento
+
+Todo dia, a partir das 08:00 de Brasília, o sistema avisa no **sino** e por **push** o que
+venceu e o que vence hoje (*"2 vencem hoje (R$ …) · 1 vencida (R$ …)"*), sem mandar nada
+quando não há o que avisar. O aviso de contas a pagar é só do administrador, no sino e no
+push. A trava do "uma vez por dia" fica no banco (`financeiro_avisos`), então reiniciar o
+app num deploy não repete o aviso.
+
+### Limites conhecidos
+
+Sem juros e multa automáticos, sem conta bancária/conciliação, sem anexo de boleto ou
+comprovante e sem despesas recorrentes — a recorrência (aluguel, internet) é o próximo
+passo natural. O limite de crédito do cliente só **avisa** no modal de gerar cobrança
+(quanto ele já deve contra o limite); não bloqueia.
+
+---
+
 ## Módulo de fabricação
 
 A tela **Fabricação** (no menu, em Oficina) é o cadastro do que a gente **fabrica** —
@@ -389,6 +470,7 @@ O menu é dividido em grupos que seguem a ordem do negócio:
 | — | Dashboard |
 | **Comercial** | Orçamentos, Vendas, Clientes |
 | **Oficina** | Produção (fila das OS), Fabricação (catálogo de SKU próprio) |
+| **Financeiro** | A receber, A pagar e Fornecedores (os dois últimos só admin) |
 | **Cadastros** | Produtos (revenda), Materiais, Serviços |
 | **Administração** | Usuários (só admin), Configurações |
 
@@ -490,6 +572,9 @@ A `005` acrescenta os campos do cadastro completo de cliente. São todos opciona
 banco, então os clientes já cadastrados continuam válidos — mas a tela passa a exigir
 inscrição estadual (ou o marcador de isento) na próxima vez que você editar um CNPJ.
 
+A `017` acrescenta o financeiro (contas a receber e a pagar). Só **cria** tabelas e uma
+coluna em `notificacoes`; nenhum dado existente é tocado e é seguro repetir.
+
 Confira o resultado antes de seguir:
 
 ```sql
@@ -539,6 +624,9 @@ O que os testes cobrem:
 - **Padrão de SKU** — normalização dos blocos (acento, cedilha, espaço), quantidade com
   2 dígitos, montagem do SKU pai e do SKU de variação, quebra de um SKU nos 5 blocos e
   recusa de categoria, material ou modelo fora do padrão.
+- **Financeiro** — entrada + saldo fechando o total em centavos, parcelas e vencimentos de
+  fim de mês, situação da conta (incluindo 22h de Brasília, que em UTC já é o dia seguinte),
+  baixa parcial, desconto, estorno, divergência da cobrança e o texto do aviso de vencimento.
 - **Filtros do dashboard** — período, enums, ids, faixa de valor, busca em tabela filha,
   granularidade do gráfico e recusa de entrada inválida.
 
@@ -555,6 +643,8 @@ O que os testes cobrem:
 | Materiais, serviços e produtos: gerenciar | ✅ | ❌ (só visualiza) |
 | Usuários | ✅ | ❌ |
 | Configurações (hora-máquina) | ✅ | ❌ (só visualiza) |
+| Financeiro: receber (gerar cobrança, registrar recebimento) | ✅ | ✅ |
+| Financeiro: estornar, cancelar, pagar, fornecedores | ✅ | ❌ |
 
 ---
 
@@ -611,6 +701,17 @@ orcamento_arquivos  → id, orcamento_id, nome, extensao, tamanho, arquivo (LONG
 notas_fiscais       → id, orcamento_id, numero, emitida_em, observacao, arquivo_nome,
                       arquivo_tipo, arquivo_tamanho, arquivo (LONGBLOB), criado_por
                       (uma por orçamento; a NF é emitida fora do sistema)
+
+lancamentos         → id, natureza (receber|pagar), descricao, cliente_id, fornecedor_id,
+                      orcamento_id, categoria_id, parcela, total_parcelas, rotulo, valor,
+                      valor_pago, desconto, vencimento, quitado_em,
+                      status (aberto|pago|cancelado), documento, observacao, criado_por
+                      (uma linha por parcela; "vencida" é derivada, nunca gravada)
+lancamento_baixas   → id, lancamento_id, valor, desconto, data_pagamento, forma, observacao,
+                      criado_por   (cada recebimento/pagamento; dá para estornar)
+fornecedores        → id, nome, cpf_cnpj, telefone, email, pix_chave, observacoes, ativo
+categorias_despesa  → id, nome, ativo
+financeiro_avisos   → dia, tipo   (trava do aviso diário de vencimentos)
 
 contadores          → chave, valor   (numeração sequencial por mês)
 schema_migrations   → versao, aplicada_em
@@ -693,6 +794,22 @@ DELETE /api/orcamentos/:id/nota-fiscal      apaga o registro inteiro
 POST   /api/orcamentos/:id/arquivos         até 10 por vez (multipart: arquivos)
 GET    /api/orcamentos/:id/arquivos/:arquivoId    baixa um arquivo
 DELETE /api/orcamentos/:id/arquivos/:arquivoId    remove um arquivo
+
+  # financeiro — /api/receber (todos) e /api/pagar (só admin) têm o mesmo formato
+GET    /api/receber                         ?status(aberto|vencido|vence_hoje|pago|cancelado)
+                                            &cliente_id&de&ate&busca&pagina&porPagina
+GET    /api/receber/resumo                  a receber · vencido · vence hoje · 7 dias · realizado no mês
+GET    /api/receber/plano-sugerido/:orcamentoId   entrada+saldo · parcelado · à vista, já calculados
+POST   /api/receber/da-os/:orcamentoId      gera as parcelas da OS/Pedido (soma = total)
+POST   /api/receber                         cobrança avulsa (cliente, valor, parcelas, 1º vencimento)
+GET    /api/receber/:id                     com os pagamentos registrados
+PUT    /api/receber/:id                     vencimento, descrição, obs. (valor: só admin, sem pagamento)
+POST   /api/receber/:id/baixas              registra recebimento (valor, desconto, data, forma)
+DELETE /api/receber/:id/baixas/:baixaId     estorna                          (admin)
+POST   /api/receber/:id/cancelar            só sem pagamento                 (admin)
+GET/POST/PUT … /api/pagar                   despesas: fornecedor_id (opcional) e categoria_id no lugar de cliente
+GET/POST/PUT/DELETE /api/fornecedores       (admin)
+GET/POST/PUT/DELETE /api/categorias-despesa (admin)
 
   # orçamento de impressão
 POST   /api/orcamentos                      cria com itens aninhados

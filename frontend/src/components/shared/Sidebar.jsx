@@ -9,7 +9,7 @@ import Icon from './Icon';
 // O Dashboard fica solto no topo: é a porta de entrada, não pertence a grupo nenhum.
 const INICIO = { to: '/dashboard', icone: 'dashboard', rotulo: 'Dashboard' };
 
-// Os grupos seguem a ordem do negócio: vender → fabricar → manter os cadastros → administrar.
+// Os grupos seguem a ordem do negócio: vender → fabricar → receber/pagar → manter os cadastros → administrar.
 const GRUPOS = [
   {
     id: 'comercial',
@@ -29,6 +29,16 @@ const GRUPOS = [
       // Catálogo do que a gente fabrica (SKU pai e variações). O rótulo não repete
       // "Produtos" para não confundir com a mercadoria de revenda, em Cadastros.
       { to: '/fabricacao/produtos', icone: 'fabricacao', rotulo: 'Fabricação' },
+    ],
+  },
+  {
+    id: 'financeiro',
+    titulo: 'Financeiro',
+    itens: [
+      { to: '/receber', icone: 'receber', rotulo: 'A receber' },
+      // Despesas e fornecedores são do administrador; o operador só cuida do que entra.
+      { to: '/pagar', icone: 'pagar', rotulo: 'A pagar', somenteAdmin: true },
+      { to: '/fornecedores', icone: 'fornecedor', rotulo: 'Fornecedores', somenteAdmin: true },
     ],
   },
   {

@@ -80,6 +80,9 @@ const arquivosCtrl = require('../controllers/arquivosOrcamentoController');
 const impressorasCtrl = require('../controllers/impressorasController');
 const alertasCtrl = require('../controllers/alertasController');
 const notificacoesCtrl = require('../controllers/notificacoesController');
+const lancamentosCtrl = require('../controllers/lancamentosController');
+const fornecedoresCtrl = require('../controllers/fornecedoresController');
+const categoriasDespesaCtrl = require('../controllers/categoriasDespesaController');
 
 // Auth
 router.post('/auth/login', authCtrl.login);
@@ -170,6 +173,49 @@ router.post('/alertas/teste', autenticar, alertasCtrl.teste);
 router.get('/notificacoes', autenticar, notificacoesCtrl.listar);
 router.post('/notificacoes/lidas', autenticar, notificacoesCtrl.marcarTodas);
 router.post('/notificacoes/:id/lida', autenticar, notificacoesCtrl.marcarLida);
+
+// Financeiro — contas a receber e a pagar. É o mesmo controller nos dois lados: o
+// prefixo diz a natureza (req.natureza) e o controller filtra por ela, então /receber
+// nunca alcança uma conta a pagar. A permissão também é do prefixo:
+//   /receber  todos os perfis; estornar e cancelar só admin
+//   /pagar    só admin, inclusive para ler
+const rotasLancamentos = (natureza, ...guardas) => {
+  const r = express.Router();
+  r.use(autenticar, ...guardas, (req, res, next) => {
+    req.natureza = natureza;
+    next();
+  });
+
+  // /resumo e /plano-sugerido vêm antes de /:id — senão o Express os trata como um id.
+  r.get('/resumo', lancamentosCtrl.resumo);
+  if (natureza === 'receber') {
+    r.get('/plano-sugerido/:orcamentoId', lancamentosCtrl.planoSugerido);
+    r.post('/da-os/:orcamentoId', lancamentosCtrl.gerarDaOs);
+  }
+  r.get('/', lancamentosCtrl.listar);
+  r.post('/', lancamentosCtrl.criar);
+  r.get('/:id', lancamentosCtrl.buscarPorId);
+  r.put('/:id', lancamentosCtrl.atualizar);
+  r.post('/:id/baixas', lancamentosCtrl.baixar);
+  r.delete('/:id/baixas/:baixaId', apenasAdmin, lancamentosCtrl.estornar);
+  r.post('/:id/cancelar', apenasAdmin, lancamentosCtrl.cancelar);
+  return r;
+};
+
+router.use('/receber', rotasLancamentos('receber'));
+router.use('/pagar', rotasLancamentos('pagar', apenasAdmin));
+
+// Fornecedores e categorias de despesa — só do lado de quem paga as contas.
+router.get('/fornecedores', autenticar, apenasAdmin, fornecedoresCtrl.listar);
+router.get('/fornecedores/:id', autenticar, apenasAdmin, fornecedoresCtrl.buscarPorId);
+router.post('/fornecedores', autenticar, apenasAdmin, fornecedoresCtrl.criar);
+router.put('/fornecedores/:id', autenticar, apenasAdmin, fornecedoresCtrl.atualizar);
+router.delete('/fornecedores/:id', autenticar, apenasAdmin, fornecedoresCtrl.excluir);
+
+router.get('/categorias-despesa', autenticar, apenasAdmin, categoriasDespesaCtrl.listar);
+router.post('/categorias-despesa', autenticar, apenasAdmin, categoriasDespesaCtrl.criar);
+router.put('/categorias-despesa/:id', autenticar, apenasAdmin, categoriasDespesaCtrl.atualizar);
+router.delete('/categorias-despesa/:id', autenticar, apenasAdmin, categoriasDespesaCtrl.excluir);
 
 // Orçamentos — compartilhado pelos dois tipos (impressão e venda)
 // /resumo vem antes de /:id — senão o Express trata 'resumo' como um id.

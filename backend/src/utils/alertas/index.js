@@ -84,11 +84,17 @@ async function inscrito(endpoint) {
   return !!r;
 }
 
-/** Manda para todas as inscrições (ou só as de um usuário). Devolve quantas receberam. */
-async function enviar(alerta, { usuarioId = null } = {}) {
+/**
+ * Manda para todas as inscrições, ou só as de um usuário, ou só as dos administradores
+ * (avisos de contas a pagar). Devolve quantas receberam.
+ */
+async function enviar(alerta, { usuarioId = null, apenasAdmin = false } = {}) {
   await chaves();
   const [inscricoes] = await db.query(
-    `SELECT id, endpoint, p256dh, auth FROM push_inscricoes ${usuarioId ? 'WHERE usuario_id = ?' : ''}`,
+    `SELECT p.id, p.endpoint, p.p256dh, p.auth
+       FROM push_inscricoes p
+       ${apenasAdmin ? "JOIN usuarios u ON u.id = p.usuario_id AND u.perfil = 'admin'" : ''}
+       ${usuarioId ? 'WHERE p.usuario_id = ?' : ''}`,
     usuarioId ? [usuarioId] : [],
   );
   const corpo = JSON.stringify(alerta);

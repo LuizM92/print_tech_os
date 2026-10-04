@@ -10,6 +10,7 @@ const TIPOS = {
   pausada: { cor: 'var(--warning)', icone: 'pausar' },
   offline: { cor: 'var(--danger)', icone: 'semRede' },
   online: { cor: 'var(--success)', icone: 'impressora' },
+  financeiro: { cor: 'var(--warning)', icone: 'dinheiro' },
 };
 
 /** "agora", "há 5 min", "há 3 h", "ontem 14:20", "12/09 08:15". */

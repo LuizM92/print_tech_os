@@ -6,6 +6,11 @@ const {
   fatorImposto, precoComImposto,
 } = require('../utils/calculoOrcamento');
 const { proximoNumero, registrarHistorico, rotulos } = require('../utils/documentos');
+const condicoesPagamento = require('../utils/condicoesPagamento');
+const financeiroBanco = require('../utils/financeiro/banco');
+const { resumirCobranca } = require('../utils/financeiro/lancamento');
+const { hojeBR } = require('../utils/financeiro/datas');
+const { moeda, reais } = require('../utils/financeiro/dinheiro');
 const {
   construirFiltro, granularidade, FORMATO_PERIODO,
 } = require('../utils/filtroOrcamentos');
@@ -329,6 +334,11 @@ const carregarOrcamento = async (executor, id) => {
   // Os arquivos que o cliente mandou (nome e tamanho, nunca o conteúdo) acompanham
   // os dois tipos de orçamento — por isso entram antes do desvio de venda.
   orcamento.arquivos = await listarArquivos(executor, id);
+
+  // A cobrança da OS/Pedido, com o resumo já comparado ao total. Se o orçamento foi
+  // editado depois de cobrar, `financeiro.divergente` acende — nada é refeito sozinho.
+  orcamento.cobranca = await financeiroBanco.doOrcamento(executor, id, hojeBR());
+  orcamento.financeiro = resumirCobranca(orcamento.total_geral, orcamento.cobranca);
 
   // Orçamento de venda tem produtos, não peças impressas — carrega só o que existe.
   if (orcamento.tipo === 'produto') {
@@ -655,6 +665,29 @@ const alterarStatus = async (req, res) => {
       return res.status(400).json({ erro: 'Não é possível aprovar um orçamento sem itens' });
     }
 
+    // Tirar a OS/Pedido de "aprovado" desfaz o que a sustentava. Com dinheiro já
+    // recebido, não dá: o estorno é uma decisão explícita, em A receber. Só com parcelas
+    // em aberto e nada recebido, elas são canceladas junto.
+    let parcelasCanceladas = 0;
+    if (orcamento.status === 'aprovado') {
+      const vivas = await financeiroBanco.vivasDoOrcamento(conn, orcamento.id);
+      const recebido = financeiroBanco.recebidoDasVivas(vivas);
+      if (recebido > 0) {
+        await conn.rollback();
+        return res.status(400).json({
+          erro: `Esta ${rotulo.aprovado} já tem ${moeda(reais(recebido))} recebido. `
+            + 'Estorne os pagamentos em A receber antes de mudar o status.',
+        });
+      }
+      if (vivas.length > 0) {
+        await conn.query(
+          "UPDATE lancamentos SET status = 'cancelado' WHERE orcamento_id = ? AND natureza = 'receber' AND status = 'aberto'",
+          [orcamento.id]
+        );
+        parcelasCanceladas = vivas.length;
+      }
+    }
+
     let numeroAprovado = orcamento[campoNumero];
 
     if (status === 'aprovado') {
@@ -683,6 +716,17 @@ const alterarStatus = async (req, res) => {
       total_anterior: orcamento.total_geral,
       total_novo: orcamento.total_geral,
     });
+
+    if (parcelasCanceladas > 0) {
+      await registrarHistorico(conn, {
+        orcamento_id: orcamento.id,
+        usuario_id: req.usuario.id,
+        acao: 'cobrança cancelada',
+        detalhe: `${parcelasCanceladas} parcela(s) em aberto canceladas junto com o status`,
+        total_anterior: orcamento.total_geral,
+        total_novo: orcamento.total_geral,
+      });
+    }
 
     await conn.commit();
     res.json({
@@ -997,16 +1041,12 @@ const gerarPDF = async (req, res) => {
     y += alturaTotais + 10;
 
     // ── Condições de pagamento ──────────────────────────────────────
-    // O parcelamento só é oferecido acima do mínimo; o desconto do PIX vale sempre.
-    const PARCELAS = 3;
-    const MINIMO_PARCELAMENTO = 300;
-    const DESCONTO_PIX = 0.05;
-    const ENTRADA = 0.3;
-
-    const parcela = orc.total_geral / PARCELAS;
-    const descontoPix = orc.total_geral * DESCONTO_PIX;
-    const totalPix = orc.total_geral - descontoPix;
-    const valorEntrada = orc.total_geral * ENTRADA;
+    // Os números vêm de condicoesPagamento, a mesma conta que gera a cobrança depois da
+    // aprovação — o valor impresso aqui e o valor cobrado nunca divergem.
+    const {
+      parcelas: PARCELAS, parcela, parcelamentoOferecido, descontoPix, totalPix,
+      entrada: valorEntrada,
+    } = condicoesPagamento.calcular(orc.total_geral);
 
     secao('CONDIÇÕES DE PAGAMENTO');
 
@@ -1022,10 +1062,10 @@ const gerarPDF = async (req, res) => {
       y += 14;
     };
 
-    if (orc.total_geral > MINIMO_PARCELAMENTO) {
+    if (parcelamentoOferecido) {
       condicaoPagamento(
         `Parcelamento em ${PARCELAS}x sem juros de ${fmtMoeda(parcela)}`,
-        `Válido para valores acima de ${fmtMoeda(MINIMO_PARCELAMENTO)}`,
+        `Válido para valores acima de ${fmtMoeda(condicoesPagamento.MINIMO_PARCELAMENTO)}`,
         orc.total_geral
       );
     }

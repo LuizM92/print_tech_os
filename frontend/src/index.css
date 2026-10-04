@@ -367,6 +367,11 @@ body {
 .stat-value.accent { color: var(--accent); }
 .stat-value.success { color: var(--success); }
 .stat-value.warning { color: var(--warning); }
+.stat-value.danger { color: var(--danger); }
+.stat-detalhe { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+/* Cartão que filtra a lista ao clicar */
+button.stat-card { text-align: left; cursor: pointer; font: inherit; color: inherit; }
+button.stat-card.ativo { border-color: var(--accent); }
 
 /* Tables */
 .table-wrapper { overflow-x: auto; }
@@ -415,6 +420,14 @@ tbody td:first-child { color: var(--text-primary); font-weight: 500; }
 .badge-aprovado { background: var(--success-dim); color: var(--success); }
 .badge-reprovado { background: var(--danger-dim); color: var(--danger); }
 .badge-cancelado { background: var(--warning-dim); color: var(--warning); }
+
+/* Situação de uma conta a receber/pagar — derivada do vencimento, nunca gravada */
+.badge-sit-a_vencer { background: var(--accent-dim); color: var(--accent); }
+.badge-sit-vence_hoje { background: var(--warning-dim); color: var(--warning); }
+.badge-sit-vencido { background: var(--danger-dim); color: var(--danger); }
+.badge-sit-pago { background: var(--success-dim); color: var(--success); }
+.badge-sit-cancelado { background: var(--bg-hover); color: var(--text-muted); }
+.badge-parcial { background: var(--bg-hover); color: var(--text-secondary); }
 
 /* Buttons */
 .btn {

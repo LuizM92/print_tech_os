@@ -101,3 +101,61 @@ export const fmtHoras = (v) => {
   const minutos = Math.round((total - horas) * 60);
   return minutos === 0 ? `${horas}h` : `${horas}h${String(minutos).padStart(2, '0')}`;
 };
+
+// ─── Financeiro ─────────────────────────────────────────────────────────────
+// Espelha backend/src/utils/financeiro/lancamento.js e condicoesPagamento.js.
+
+/**
+ * AAAA-MM-DD → 04/10/2026. Não passa por `new Date`: um vencimento é um dia do
+ * calendário, e o fuso deslocaria esse dia (à meia-noite UTC já é "ontem" no Brasil).
+ */
+export const fmtDiaISO = (iso) =>
+  (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '—');
+
+/** Hoje no relógio do navegador, como AAAA-MM-DD (`toISOString` daria o dia em UTC). */
+export const hojeISO = () => {
+  const d = new Date();
+  const dois = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}`;
+};
+
+/** Reais (texto de um campo ou número) em centavos inteiros, para comparar sem erro de float. */
+export const centavos = (v) => {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? Math.round(Number((n * 100).toPrecision(15))) : 0;
+};
+
+export const DESCONTO_PIX = 0.05;
+export const MAX_PARCELAS = 12;
+
+export const FORMAS_PAGAMENTO = [
+  { valor: 'pix', rotulo: 'PIX' },
+  { valor: 'boleto', rotulo: 'Boleto' },
+  { valor: 'cartao', rotulo: 'Cartão' },
+  { valor: 'dinheiro', rotulo: 'Dinheiro' },
+  { valor: 'transferencia', rotulo: 'Transferência' },
+  { valor: 'outro', rotulo: 'Outro' },
+];
+
+export const rotuloForma = (valor) =>
+  FORMAS_PAGAMENTO.find((f) => f.valor === valor)?.rotulo || valor;
+
+/** Os recortes da lista de contas. "Vencida" e "vence hoje" são derivados no servidor. */
+export const FILTROS_LANCAMENTO = [
+  { valor: 'aberto', rotulo: 'Em aberto' },
+  { valor: 'vencido', rotulo: 'Vencidas' },
+  { valor: 'vence_hoje', rotulo: 'Vencem hoje' },
+  { valor: 'pago', rotulo: 'Quitadas' },
+  { valor: 'cancelado', rotulo: 'Canceladas' },
+  { valor: '', rotulo: 'Todas' },
+];
+
+/** O texto do selo da situação: "Vence em 5 dias", "Vencida há 3 dias"… */
+export const rotuloSituacao = ({ codigo, dias }) => {
+  if (codigo === 'a_vencer') return dias === 1 ? 'Vence amanhã' : `Vence em ${dias} dias`;
+  if (codigo === 'vence_hoje') return 'Vence hoje';
+  if (codigo === 'vencido') return dias === 1 ? 'Vencida há 1 dia' : `Vencida há ${dias} dias`;
+  if (codigo === 'pago') return 'Quitada';
+  if (codigo === 'cancelado') return 'Cancelada';
+  return codigo;
+};

@@ -15,6 +15,60 @@ const filtroVazio = {
 
 const rotuloCard = { fontSize: 11 };
 
+/**
+ * O financeiro de hoje. Não obedece aos filtros do dashboard — eles recortam orçamentos
+ * por período, e quanto se deve receber ou pagar é uma pergunta sobre o agora. A
+ * parte de contas a pagar só existe para o administrador.
+ */
+function FaixaFinanceiro({ navigate, admin }) {
+  const [receber, setReceber] = useState(null);
+  const [pagar, setPagar] = useState(null);
+
+  useEffect(() => {
+    api.get('/receber/resumo').then((r) => setReceber(r.data)).catch(() => {});
+    if (admin) api.get('/pagar/resumo').then((r) => setPagar(r.data)).catch(() => {});
+  }, [admin]);
+
+  if (!receber) return null;
+
+  const cartoes = [
+    { rotulo: 'A receber', valor: receber.em_aberto.valor, detalhe: `${receber.em_aberto.qtd} conta(s)`, classe: 'accent', para: '/receber' },
+    { rotulo: 'Cobranças vencidas', valor: receber.vencido.valor, detalhe: `${receber.vencido.qtd} conta(s)`, classe: receber.vencido.qtd > 0 ? 'danger' : '', para: '/receber' },
+    { rotulo: 'Recebido no mês', valor: receber.realizado_mes, classe: 'success', para: '/receber' },
+  ];
+  if (pagar) {
+    cartoes.push(
+      { rotulo: 'A pagar', valor: pagar.em_aberto.valor, detalhe: `${pagar.vencido.qtd > 0 ? `${pagar.vencido.qtd} vencida(s) · ` : ''}${pagar.em_aberto.qtd} conta(s)`, classe: pagar.vencido.qtd > 0 ? 'warning' : '', para: '/pagar' },
+      { rotulo: 'Pago no mês', valor: pagar.realizado_mes, classe: '', para: '/pagar' },
+      { rotulo: 'Saldo do mês', valor: receber.realizado_mes - pagar.realizado_mes, detalhe: 'recebido − pago', classe: receber.realizado_mes - pagar.realizado_mes >= 0 ? 'success' : 'danger', para: null },
+    );
+  }
+
+  return (
+    <>
+      <h3 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, margin: '8px 0 12px' }}>
+        Financeiro — hoje
+      </h3>
+      <div className="stats-grid">
+        {cartoes.map((c) => {
+          const corpo = (
+            <>
+              <div className="stat-label" style={rotuloCard}>{c.rotulo}</div>
+              <div className={`stat-value ${c.classe}`} style={{ fontSize: 18 }}>{fmtMoeda(c.valor)}</div>
+              {c.detalhe && <div className="stat-detalhe">{c.detalhe}</div>}
+            </>
+          );
+          return c.para ? (
+            <button key={c.rotulo} type="button" className="stat-card" onClick={() => navigate(c.para)}>{corpo}</button>
+          ) : (
+            <div key={c.rotulo} className="stat-card">{corpo}</div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 export default function Dashboard() {
   const { usuario, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -271,6 +325,8 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+
+        <FaixaFinanceiro navigate={navigate} admin={isAdmin()} />
 
         {/* ── Evolução ─────────────────────────────────────────────── */}
         <div className="card" style={{ marginBottom: 16 }}>
