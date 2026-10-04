@@ -1001,10 +1001,12 @@ const gerarPDF = async (req, res) => {
     const PARCELAS = 3;
     const MINIMO_PARCELAMENTO = 300;
     const DESCONTO_PIX = 0.05;
+    const ENTRADA = 0.3;
 
     const parcela = orc.total_geral / PARCELAS;
     const descontoPix = orc.total_geral * DESCONTO_PIX;
     const totalPix = orc.total_geral - descontoPix;
+    const valorEntrada = orc.total_geral * ENTRADA;
 
     secao('CONDIÇÕES DE PAGAMENTO');
 
@@ -1033,6 +1035,13 @@ const gerarPDF = async (req, res) => {
       `Desconto de ${fmtMoeda(descontoPix)} sobre o total geral`,
       totalPix,
       CORES.sucesso
+    );
+
+    // A entrada vem por último: é o que o cliente paga para o serviço começar.
+    condicaoPagamento(
+      'Entrada de 30% para iniciar o serviço',
+      `Calculada sobre o total geral de ${fmtMoeda(orc.total_geral)}`,
+      valorEntrada
     );
 
     y += 6;
