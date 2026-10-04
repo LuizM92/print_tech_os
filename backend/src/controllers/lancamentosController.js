@@ -636,6 +636,136 @@ const cancelar = async (req, res) => {
   }
 };
 
+// ─── Despesas recorrentes (só em /pagar) ────────────────────────────────────
+
+/** Quantas contas o intervalo geraria, e as primeiras datas — para o formulário mostrar antes de lançar. */
+const previaRecorrencia = (req, res) => {
+  const erro = plano.validarRecorrencia(req.query);
+  if (erro) return res.status(400).json({ erro });
+  const datasGeradas = plano.ocorrencias(req.query.inicio, req.query.fim, req.query.frequencia);
+  res.json({
+    total: datasGeradas.length,
+    primeira: datasGeradas[0],
+    ultima: datasGeradas[datasGeradas.length - 1],
+    datas: datasGeradas.slice(0, 24),
+  });
+};
+
+/**
+ * Lança de uma vez todas as contas do intervalo, uma por vencimento, todas com o mesmo
+ * valor e ligadas pela recorrência. Depois disso cada uma vive sozinha em A pagar.
+ */
+const criarRecorrencia = async (req, res) => {
+  try {
+    const corpo = req.body;
+    const erroIntervalo = plano.validarRecorrencia(corpo);
+    if (erroIntervalo) return res.status(400).json({ erro: erroIntervalo });
+    // Descrição, valor, categoria e fornecedor seguem as mesmas regras da despesa avulsa.
+    const { erro, dados } = await validarAvulso(
+      { ...corpo, parcelas: 1, primeiro_vencimento: corpo.inicio }, 'pagar'
+    );
+    if (erro) return res.status(400).json({ erro });
+
+    const vencimentos = plano.ocorrencias(corpo.inicio, corpo.fim, corpo.frequencia);
+    const valor = reais(centavos(dados.valor));
+
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [rec] = await conn.query(
+        `INSERT INTO recorrencias (descricao, frequencia, inicio, fim, valor, categoria_id, fornecedor_id, criado_por)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [dados.descricao, corpo.frequencia, corpo.inicio, corpo.fim, valor,
+          dados.categoria_id, dados.fornecedor_id, req.usuario.id]
+      );
+      for (const [i, vencimento] of vencimentos.entries()) {
+        await conn.query(
+          `INSERT INTO lancamentos
+             (natureza, descricao, fornecedor_id, categoria_id, recorrencia_id, parcela, total_parcelas,
+              valor, vencimento, documento, observacao, criado_por)
+           VALUES ('pagar', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [dados.descricao, dados.fornecedor_id, dados.categoria_id, rec.insertId, i + 1,
+            vencimentos.length, valor, vencimento, dados.documento, dados.observacao, req.usuario.id]
+        );
+      }
+      await conn.commit();
+      res.status(201).json({
+        mensagem: `${plural(vencimentos.length, 'conta lançada', 'contas lançadas')} de ${datas.formatarDia(vencimentos[0])} a ${datas.formatarDia(vencimentos[vencimentos.length - 1])}`,
+        recorrencia_id: rec.insertId,
+        total: vencimentos.length,
+      });
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    erro500(res, err);
+  }
+};
+
+const plural = (n, singular, pluralizado) => `${n} ${n === 1 ? singular : pluralizado}`;
+
+/**
+ * Mexe nas contas da série "a partir desta": só as em aberto, sem nenhum pagamento e com
+ * vencimento igual ou posterior ao da conta escolhida. O que já foi pago, e o que já
+ * venceu antes dela, fica como está.
+ */
+const naSerie = (acao) => async (req, res) => {
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const ancora = await banco.travar(conn, req.params.id, req.natureza);
+    if (!ancora) {
+      await conn.rollback();
+      return res.status(404).json({ erro: 'Conta não encontrada' });
+    }
+    if (!ancora.recorrencia_id) {
+      await conn.rollback();
+      return res.status(400).json({ erro: 'Esta conta não faz parte de uma despesa recorrente' });
+    }
+
+    const alvo = `recorrencia_id = ? AND natureza = 'pagar' AND status = 'aberto'
+                  AND valor_pago = 0 AND desconto = 0 AND vencimento >= ?`;
+    const parametros = [ancora.recorrencia_id, ancora.vencimento_iso];
+    // Trava as contas da série antes de alterar, para uma baixa em andamento não se perder.
+    await conn.query(`SELECT id FROM lancamentos WHERE ${alvo} FOR UPDATE`, parametros);
+
+    let resultado;
+    if (acao === 'cancelar') {
+      [resultado] = await conn.query(`UPDATE lancamentos SET status = 'cancelado' WHERE ${alvo}`, parametros);
+    } else {
+      if (!(centavos(req.body.valor) > 0)) {
+        await conn.rollback();
+        return res.status(400).json({ erro: 'Informe um valor maior que zero' });
+      }
+      [resultado] = await conn.query(
+        `UPDATE lancamentos SET valor = ? WHERE ${alvo}`, [reais(centavos(req.body.valor)), ...parametros]
+      );
+    }
+
+    await conn.commit();
+    const n = resultado.affectedRows;
+    res.json({
+      alteradas: n,
+      mensagem: acao === 'cancelar'
+        ? `${plural(n, 'conta cancelada', 'contas canceladas')}`
+        : `${plural(n, 'conta reajustada', 'contas reajustadas')} para ${moeda(req.body.valor)}`,
+    });
+  } catch (err) {
+    await conn.rollback();
+    erro500(res, err);
+  } finally {
+    conn.release();
+  }
+};
+
+const cancelarSerie = naSerie('cancelar');
+const reajustarSerie = naSerie('reajustar');
+
 module.exports = {
   listar, buscarPorId, resumo, planoSugerido, gerarDaOs, criar, atualizar, baixar, estornar, cancelar,
+  previaRecorrencia, criarRecorrencia, cancelarSerie, reajustarSerie,
 };

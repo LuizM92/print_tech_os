@@ -103,6 +103,43 @@ const validarParcelas = (parcelas, { total = null } = {}) => {
   return null;
 };
 
+// ─── Despesas recorrentes ───────────────────────────────────────────────────
+
+const FREQUENCIAS = ['semanal', 'mensal', 'anual'];
+// Um limite para um intervalo digitado errado (ano 2926) não lançar milhares de contas.
+const MAX_OCORRENCIAS = 120;
+
+/**
+ * Os vencimentos de uma recorrência: do início até o fim, na frequência escolhida. Cada
+ * data é contada a partir do início, e não da anterior — assim um aluguel do dia 31 cai em
+ * 28/02 e volta ao dia 31 em março, em vez de ficar preso no 28.
+ * Pode devolver uma a mais que o limite, para o validador reconhecer o excesso.
+ */
+const ocorrencias = (inicio, fim, frequencia) => {
+  const datas = [];
+  for (let i = 0; i <= MAX_OCORRENCIAS; i++) {
+    let data;
+    if (frequencia === 'semanal') data = somarDias(inicio, 7 * i);
+    else data = somarMeses(inicio, (frequencia === 'anual' ? 12 : 1) * i);
+    if (data > fim) break;
+    datas.push(data);
+  }
+  return datas;
+};
+
+/** Confere frequência e intervalo. Devolve a mensagem de erro, ou null. */
+const validarRecorrencia = ({ inicio, fim, frequencia }) => {
+  if (!FREQUENCIAS.includes(frequencia)) return 'Escolha a frequência';
+  if (!ehDataISO(inicio)) return 'Informe a data do primeiro lançamento';
+  if (!ehDataISO(fim)) return 'Informe até quando lançar';
+  if (fim < inicio) return 'A data final não pode ser antes da inicial';
+  if (ocorrencias(inicio, fim, frequencia).length > MAX_OCORRENCIAS) {
+    return `Esse intervalo gera mais de ${MAX_OCORRENCIAS} lançamentos — reduza o período`;
+  }
+  return null;
+};
+
 module.exports = {
+  FREQUENCIAS, MAX_OCORRENCIAS, ocorrencias, validarRecorrencia,
   PRAZO_SALDO_DIAS, aVista, entradaESaldo, parcelado, parcelarAvulso, sugerir, validarParcelas,
 };

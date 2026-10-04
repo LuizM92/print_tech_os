@@ -282,6 +282,24 @@ No **Dashboard**, a faixa *Financeiro — hoje* mostra o que há a receber, o ve
 recebido no mês; o admin vê também a pagar, o pago no mês e o saldo. Ela não obedece aos
 filtros de orçamento, porque fala do agora.
 
+### Despesas recorrentes
+
+Em **A pagar → Nova despesa**, marcar *Despesa recorrente* troca as parcelas por um
+intervalo: valor de cada conta, frequência (todo mês, toda semana, todo ano), primeiro
+vencimento e **lançar até**. O formulário mostra antes quantas contas saem e o total; ao
+confirmar, o sistema lança de uma vez **uma conta para cada vencimento do período**.
+
+- Cada conta é comum: aparece em A pagar (marcada como *recorrente 3/12*), é paga e
+  editada sozinha. Não há rotina lançando mês a mês — o que vem pela frente já está
+  visível desde o primeiro dia.
+- O vencimento é contado a partir do primeiro, e não do anterior: um aluguel do dia 31
+  cai em 28/02 e volta ao dia 31 em março.
+- No detalhe de qualquer conta da série, **Reajustar esta e as próximas** (aluguel que
+  subiu) e **Cancelar esta e as próximas** (contrato que acabou) valem só para as contas
+  em aberto e sem pagamento, a partir da escolhida — o que já foi pago não muda.
+- Limite de 120 lançamentos por recorrência, para um intervalo digitado errado não
+  encher o sistema. Para ir além, cadastre uma nova série quando a anterior acabar.
+
 ### Aviso de vencimento
 
 Todo dia, a partir das 08:00 de Brasília, o sistema avisa no **sino** e por **push** o que
@@ -292,9 +310,8 @@ app num deploy não repete o aviso.
 
 ### Limites conhecidos
 
-Sem juros e multa automáticos, sem conta bancária/conciliação, sem anexo de boleto ou
-comprovante e sem despesas recorrentes — a recorrência (aluguel, internet) é o próximo
-passo natural. O limite de crédito do cliente só **avisa** no modal de gerar cobrança
+Sem juros e multa automáticos, sem conta bancária/conciliação e sem anexo de boleto ou
+comprovante. O limite de crédito do cliente só **avisa** no modal de gerar cobrança
 (quanto ele já deve contra o limite); não bloqueia.
 
 ---
@@ -573,7 +590,8 @@ banco, então os clientes já cadastrados continuam válidos — mas a tela pass
 inscrição estadual (ou o marcador de isento) na próxima vez que você editar um CNPJ.
 
 A `017` acrescenta o financeiro (contas a receber e a pagar). Só **cria** tabelas e uma
-coluna em `notificacoes`; nenhum dado existente é tocado e é seguro repetir.
+coluna em `notificacoes`; nenhum dado existente é tocado e é seguro repetir. A `018`
+acrescenta as despesas recorrentes: uma tabela nova e uma coluna em `lancamentos`.
 
 Confira o resultado antes de seguir:
 
@@ -712,6 +730,8 @@ lancamento_baixas   → id, lancamento_id, valor, desconto, data_pagamento, form
 fornecedores        → id, nome, cpf_cnpj, telefone, email, pix_chave, observacoes, ativo
 categorias_despesa  → id, nome, ativo
 financeiro_avisos   → dia, tipo   (trava do aviso diário de vencimentos)
+recorrencias        → id, descricao, frequencia (semanal|mensal|anual), inicio, fim, valor,
+                      categoria_id, fornecedor_id   (lancamentos.recorrencia_id aponta para ela)
 
 contadores          → chave, valor   (numeração sequencial por mês)
 schema_migrations   → versao, aplicada_em
@@ -808,6 +828,10 @@ POST   /api/receber/:id/baixas              registra recebimento (valor, descont
 DELETE /api/receber/:id/baixas/:baixaId     estorna                          (admin)
 POST   /api/receber/:id/cancelar            só sem pagamento                 (admin)
 GET/POST/PUT … /api/pagar                   despesas: fornecedor_id (opcional) e categoria_id no lugar de cliente
+GET    /api/pagar/recorrencia/previa        ?inicio&fim&frequencia — quantas contas o intervalo geraria
+POST   /api/pagar/recorrencia               lança a série (descricao, valor, categoria_id, frequencia, inicio, fim)
+POST   /api/pagar/:id/serie/cancelar        cancela esta e as próximas em aberto e sem pagamento
+PUT    /api/pagar/:id/serie/valor           reajusta o valor desta e das próximas (mesma regra)
 GET/POST/PUT/DELETE /api/fornecedores       (admin)
 GET/POST/PUT/DELETE /api/categorias-despesa (admin)
 

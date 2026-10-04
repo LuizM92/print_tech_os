@@ -163,3 +163,43 @@ test('validarParcelas: recusa lista vazia, valor zerado, data inválida e excess
 test('validarParcelas sem total aceita qualquer soma (avulso e despesa)', () => {
   assert.strictEqual(validarParcelas([{ valor: 42.5, vencimento: HOJE }]), null);
 });
+
+// ─── Recorrência ────────────────────────────────────────────────────────────
+
+const { ocorrencias, validarRecorrencia } = require('./plano');
+
+test('recorrência mensal lança um vencimento por mês, incluindo a data final', () => {
+  assert.deepStrictEqual(ocorrencias('2026-11-05', '2027-02-05', 'mensal'),
+    ['2026-11-05', '2026-12-05', '2027-01-05', '2027-02-05']);
+});
+
+test('data final no meio do mês não gera lançamento depois dela', () => {
+  assert.deepStrictEqual(ocorrencias('2026-11-05', '2027-01-04', 'mensal'), ['2026-11-05', '2026-12-05']);
+});
+
+test('aluguel do dia 31 cai no último dia dos meses curtos e volta ao 31', () => {
+  assert.deepStrictEqual(ocorrencias('2026-01-31', '2026-05-31', 'mensal'),
+    ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31']);
+});
+
+test('semanal e anual', () => {
+  assert.deepStrictEqual(ocorrencias('2026-10-04', '2026-10-25', 'semanal'),
+    ['2026-10-04', '2026-10-11', '2026-10-18', '2026-10-25']);
+  assert.deepStrictEqual(ocorrencias('2026-03-10', '2028-03-10', 'anual'),
+    ['2026-03-10', '2027-03-10', '2028-03-10']);
+});
+
+test('início e fim no mesmo dia lança uma só', () => {
+  assert.deepStrictEqual(ocorrencias('2026-10-04', '2026-10-04', 'mensal'), ['2026-10-04']);
+});
+
+test('validarRecorrencia recusa frequência, datas e intervalo absurdo', () => {
+  const ok = { inicio: '2026-11-05', fim: '2027-10-05', frequencia: 'mensal' };
+  assert.strictEqual(validarRecorrencia(ok), null);
+  assert.match(validarRecorrencia({ ...ok, frequencia: 'diaria' }), /frequência/);
+  assert.match(validarRecorrencia({ ...ok, inicio: '2026-02-30' }), /primeiro lançamento/);
+  assert.match(validarRecorrencia({ ...ok, fim: '' }), /até quando/);
+  assert.match(validarRecorrencia({ ...ok, fim: '2026-11-04' }), /antes da inicial/);
+  assert.match(validarRecorrencia({ ...ok, fim: '2036-11-05' }), /mais de 120/);   // 121 meses
+  assert.strictEqual(validarRecorrencia({ ...ok, fim: '2036-10-05' }), null);      // 120 meses
+});

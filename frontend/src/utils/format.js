@@ -126,6 +126,12 @@ export const centavos = (v) => {
 };
 
 export const DESCONTO_PIX = 0.05;
+
+export const FREQUENCIAS = [
+  { valor: 'mensal', rotulo: 'Todo mês' },
+  { valor: 'semanal', rotulo: 'Toda semana' },
+  { valor: 'anual', rotulo: 'Todo ano' },
+];
 export const MAX_PARCELAS = 12;
 
 export const FORMAS_PAGAMENTO = [

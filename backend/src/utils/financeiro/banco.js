@@ -20,7 +20,7 @@ const JOINS_LANCAMENTO = `
 // vencimento à meia-noite UTC aparece como o dia anterior.
 const SELECT_LANCAMENTO = `
   SELECT l.id, l.natureza, l.descricao, l.cliente_id, l.fornecedor_id, l.orcamento_id,
-         l.categoria_id, l.parcela, l.total_parcelas, l.rotulo,
+         l.categoria_id, l.recorrencia_id, l.parcela, l.total_parcelas, l.rotulo,
          l.valor, l.valor_pago, l.desconto,
          DATE_FORMAT(l.vencimento, '%Y-%m-%d') AS vencimento,
          DATE_FORMAT(l.quitado_em, '%Y-%m-%d') AS quitado_em,

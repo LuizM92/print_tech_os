@@ -192,6 +192,13 @@ const rotasLancamentos = (natureza, ...guardas) => {
     r.get('/plano-sugerido/:orcamentoId', lancamentosCtrl.planoSugerido);
     r.post('/da-os/:orcamentoId', lancamentosCtrl.gerarDaOs);
   }
+  // Despesas recorrentes: só do lado de quem paga as contas.
+  if (natureza === 'pagar') {
+    r.get('/recorrencia/previa', lancamentosCtrl.previaRecorrencia);
+    r.post('/recorrencia', lancamentosCtrl.criarRecorrencia);
+    r.post('/:id/serie/cancelar', lancamentosCtrl.cancelarSerie);
+    r.put('/:id/serie/valor', lancamentosCtrl.reajustarSerie);
+  }
   r.get('/', lancamentosCtrl.listar);
   r.post('/', lancamentosCtrl.criar);
   r.get('/:id', lancamentosCtrl.buscarPorId);

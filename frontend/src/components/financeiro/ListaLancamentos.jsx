@@ -216,7 +216,7 @@ export default function ListaLancamentos({ natureza }) {
                     <td>
                       <div>{c.descricao}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                        {c.total_parcelas > 1 && <>parcela {c.parcela}/{c.total_parcelas}</>}
+                        {c.total_parcelas > 1 && <>{c.recorrencia_id ? 'recorrente' : 'parcela'} {c.parcela}/{c.total_parcelas}</>}
                         {c.total_parcelas > 1 && c.documento && ' · '}
                         {c.documento && <>doc. {c.documento}</>}
                       </div>

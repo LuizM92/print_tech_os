@@ -34,6 +34,7 @@ export default function ModalDetalheLancamento({ id, natureza, onClose, onMudou 
   const [baixando, setBaixando] = useState(false);
   const [confirmacao, setConfirmacao] = useState(null);
   const [salvando, setSalvando] = useState(false);
+  const [novoValor, setNovoValor] = useState('');
 
   // Os callbacks do pai mudam a cada render dele; guardados em ref, não refazem a busca.
   const aoFechar = useRef(onClose);
@@ -112,6 +113,20 @@ export default function ModalDetalheLancamento({ id, natureza, onClose, onMudou 
       await depoisDeMudar();
     } catch (err) {
       toast.error(err.response?.data?.erro || 'Erro ao estornar');
+    }
+  };
+
+  // "Esta e as próximas" da despesa recorrente: só as em aberto e sem pagamento.
+  const mexerNaSerie = async (acao) => {
+    setConfirmacao(null);
+    try {
+      const { data } = acao === 'cancelar'
+        ? await api.post(`/${natureza}/${id}/serie/cancelar`, {})
+        : await api.put(`/${natureza}/${id}/serie/valor`, { valor: novoValor });
+      toast.success(data.mensagem);
+      await depoisDeMudar();
+    } catch (err) {
+      toast.error(err.response?.data?.erro || 'Erro ao alterar a série');
     }
   };
 
@@ -236,6 +251,28 @@ export default function ModalDetalheLancamento({ id, natureza, onClose, onMudou 
           </form>
         )}
 
+        {aberta && conta.recorrencia_id && (
+          <>
+            <h4 style={tituloSecao}>Despesa recorrente</h4>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+              Esta conta é a {conta.parcela} de {conta.total_parcelas} da série. As ações abaixo valem
+              para esta e as próximas que estiverem em aberto e sem pagamento — o que já foi pago não muda.
+            </div>
+            <div className="flex gap-3 items-center" style={{ flexWrap: 'wrap' }}>
+              <input
+                type="number" step="0.01" min="0.01" value={novoValor} placeholder="Novo valor"
+                onChange={(e) => setNovoValor(e.target.value)} style={{ width: 150 }}
+              />
+              <button type="button" className="btn btn-ghost btn-sm" disabled={centavos(novoValor) <= 0} onClick={() => mexerNaSerie('reajustar')}>
+                Reajustar esta e as próximas
+              </button>
+              <button type="button" className="btn btn-danger btn-sm" onClick={() => setConfirmacao('serie')}>
+                Cancelar esta e as próximas
+              </button>
+            </div>
+          </>
+        )}
+
         {!aberta && conta.observacao && (
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 14 }}>{conta.observacao}</div>
         )}
@@ -256,6 +293,13 @@ export default function ModalDetalheLancamento({ id, natureza, onClose, onMudou 
         onConfirm={cancelar}
         title="Cancelar esta conta?"
         message="Ela deixa de contar nos totais. Dá para refazer a cobrança depois."
+      />
+      <ConfirmModal
+        isOpen={confirmacao === 'serie'}
+        onClose={() => setConfirmacao(null)}
+        onConfirm={() => mexerNaSerie('cancelar')}
+        title="Cancelar esta e as próximas?"
+        message="As contas em aberto e sem pagamento, a partir desta, são canceladas. As já pagas ficam como estão."
       />
       <ConfirmModal
         isOpen={!!confirmacao?.estornar}
