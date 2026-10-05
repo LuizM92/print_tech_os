@@ -26,9 +26,11 @@ const marcarLida = async (req, res) => {
   }
 };
 
+// Com `categoria` no corpo marca só aquela aba; sem ela (ou com valor desconhecido), tudo.
 const marcarTodas = async (req, res) => {
   try {
-    await notificacoes.marcarTodas(req.usuario.id, visao(req));
+    const categoria = notificacoes.CATEGORIAS.includes(req.body?.categoria) ? req.body.categoria : null;
+    await notificacoes.marcarTodas(req.usuario.id, { ...visao(req), categoria });
     res.json(await notificacoes.listar(req.usuario.id, visao(req)));
   } catch (err) {
     erro500(res, err);

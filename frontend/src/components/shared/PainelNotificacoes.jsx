@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotificacoes } from '../../contexts/NotificacoesContext';
 import Icon from './Icon';
@@ -12,6 +12,20 @@ const TIPOS = {
   online: { cor: 'var(--success)', icone: 'impressora' },
   financeiro: { cor: 'var(--warning)', icone: 'dinheiro' },
 };
+
+// As abas do painel. A categoria de cada notificação vem do servidor (`n.categoria`).
+const ABAS = [
+  {
+    id: 'impressao',
+    rotulo: 'Impressão',
+    vazio: 'Quando uma impressora terminar, falhar, pausar sozinha ou cair da rede, aparece aqui.',
+  },
+  {
+    id: 'financeiro',
+    rotulo: 'Financeiro',
+    vazio: 'Quando houver cobranças ou contas vencidas ou vencendo hoje, o aviso aparece aqui.',
+  },
+];
 
 /** "agora", "há 5 min", "há 3 h", "ontem 14:20", "12/09 08:15". */
 function quando(data) {
@@ -29,9 +43,11 @@ function quando(data) {
 
 /** O painel do sino. Fica no layout e abre ao lado do menu (ou embaixo da barra, no celular). */
 export default function PainelNotificacoes() {
-  const { itens, naoLidas, aberto, fechar, marcarLida, marcarTodas } = useNotificacoes();
+  const { itens, naoLidasPorCategoria, aberto, fechar, marcarLida, marcarTodas } = useNotificacoes();
   const navigate = useNavigate();
   const ref = useRef(null);
+  // A aba fica guardada entre aberturas: quem acompanha o financeiro volta nela.
+  const [abaId, setAbaId] = useState(ABAS[0].id);
 
   // Fecha no Esc e no clique fora — menos no próprio botão do sino, que alterna sozinho.
   useEffect(() => {
@@ -48,8 +64,12 @@ export default function PainelNotificacoes() {
 
   if (!aberto) return null;
 
+  const aba = ABAS.find((a) => a.id === abaId);
+  const itensDaAba = itens.filter((n) => n.categoria === aba.id);
+  const naoLidasDaAba = naoLidasPorCategoria[aba.id] || 0;
+
   const abrirItem = (n) => {
-    if (!n.lida) marcarLida(n.id);
+    if (!n.lida) marcarLida(n.id, n.categoria);
     fechar();
     if (n.url) navigate(n.url);
   };
@@ -58,18 +78,40 @@ export default function PainelNotificacoes() {
     <div className="notif-painel" ref={ref} role="dialog" aria-label="Notificações">
       <div className="notif-topo">
         <strong>Notificações</strong>
-        {naoLidas > 0 && (
-          <button type="button" className="link-button" onClick={marcarTodas}>Marcar todas como lidas</button>
+        {naoLidasDaAba > 0 && (
+          <button type="button" className="link-button" onClick={() => marcarTodas(aba.id)}>Marcar todas como lidas</button>
         )}
       </div>
-      <div className="notif-lista">
-        {itens.length === 0 ? (
+      <div className="notif-abas" role="tablist" aria-label="Tipo de notificação">
+        {ABAS.map((a) => {
+          const pendentes = naoLidasPorCategoria[a.id] || 0;
+          return (
+            <button
+              key={a.id}
+              type="button"
+              role="tab"
+              id={`notif-aba-${a.id}`}
+              aria-selected={a.id === aba.id}
+              aria-controls="notif-lista"
+              className={`notif-aba ${a.id === aba.id ? 'ativa' : ''}`}
+              onClick={() => setAbaId(a.id)}
+            >
+              {a.rotulo}
+              {pendentes > 0 && (
+                <span className="sino-contador" aria-label={`${pendentes} não lidas`}>{pendentes > 99 ? '99+' : pendentes}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="notif-lista" id="notif-lista" role="tabpanel" aria-labelledby={`notif-aba-${aba.id}`}>
+        {itensDaAba.length === 0 ? (
           <div className="notif-vazio">
             <Icon name="sino" />
             <p>Nada por aqui ainda.</p>
-            <p>Quando uma impressora terminar, falhar, pausar sozinha ou cair da rede, aparece aqui.</p>
+            <p>{aba.vazio}</p>
           </div>
-        ) : itens.map((n) => {
+        ) : itensDaAba.map((n) => {
           const t = TIPOS[n.tipo] || { cor: 'var(--accent)', icone: 'sino' };
           return (
             <button
