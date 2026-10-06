@@ -9,6 +9,7 @@ import Sidebar from './components/shared/Sidebar';
 import BarraMobile from './components/shared/BarraMobile';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Agenda from './pages/Agenda';
 import Clientes from './pages/Clientes';
 import Materiais from './pages/Materiais';
 import Servicos from './pages/Servicos';
@@ -64,6 +65,7 @@ function AppRoutes() {
       <Route path="/" element={<Navigate to="/dashboard" />} />
 
       <Route path="/dashboard" element={<PrivateRoute><AppLayout><Dashboard /></AppLayout></PrivateRoute>} />
+      <Route path="/agenda" element={<PrivateRoute><AppLayout><Agenda /></AppLayout></PrivateRoute>} />
       <Route path="/clientes" element={<PrivateRoute><AppLayout><Clientes /></AppLayout></PrivateRoute>} />
       <Route path="/materiais" element={<PrivateRoute><AppLayout><Materiais /></AppLayout></PrivateRoute>} />
       <Route path="/servicos" element={<PrivateRoute><AppLayout><Servicos /></AppLayout></PrivateRoute>} />

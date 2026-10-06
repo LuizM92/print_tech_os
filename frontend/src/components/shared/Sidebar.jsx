@@ -6,8 +6,10 @@ import { useNotificacoes } from '../../contexts/NotificacoesContext';
 import usePersistido from '../../hooks/usePersistido';
 import Icon from './Icon';
 
-// O Dashboard fica solto no topo: é a porta de entrada, não pertence a grupo nenhum.
+// O Dashboard e a Agenda ficam soltos no topo: são a porta de entrada e o dia a dia, não
+// pertencem a grupo nenhum.
 const INICIO = { to: '/dashboard', icone: 'dashboard', rotulo: 'Dashboard' };
+const AGENDA = { to: '/agenda', icone: 'agenda', rotulo: 'Agenda' };
 
 // Os grupos seguem a ordem do negócio: vender → fabricar → receber/pagar → manter os cadastros → administrar.
 const GRUPOS = [
@@ -157,6 +159,7 @@ export default function Sidebar() {
         <nav className="sidebar-nav" onScroll={() => setDica(null)}>
           <div className="nav-section">
             {renderItem(INICIO)}
+            {renderItem(AGENDA)}
             {/* O sino não é uma tela: abre o painel ao lado do menu. */}
             <button
               type="button"

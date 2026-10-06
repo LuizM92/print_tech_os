@@ -53,8 +53,9 @@ export default function ListaLancamentos({ natureza }) {
   // Quem chega da OS traz o número dela na URL (?busca=OS-...).
   const [busca, setBusca] = useState(params.get('busca') || '');
   const [status, setStatus] = useState(params.get('busca') ? '' : 'aberto');
-  const [de, setDe] = useState('');
-  const [ate, setAte] = useState('');
+  // O calendário da agenda manda o dia (?de=…&ate=…) de quem vence nele.
+  const [de, setDe] = useState(params.get('de') || '');
+  const [ate, setAte] = useState(params.get('ate') || '');
   const [pagina, setPagina] = useState(1);
 
   const [detalhe, setDetalhe] = useState(null);

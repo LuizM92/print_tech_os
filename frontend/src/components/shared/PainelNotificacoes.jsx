@@ -11,6 +11,7 @@ const TIPOS = {
   offline: { cor: 'var(--danger)', icone: 'semRede' },
   online: { cor: 'var(--success)', icone: 'impressora' },
   financeiro: { cor: 'var(--warning)', icone: 'dinheiro' },
+  agenda: { cor: 'var(--accent)', icone: 'agenda' },
 };
 
 // As abas do painel. A categoria de cada notificação vem do servidor (`n.categoria`).
@@ -24,6 +25,11 @@ const ABAS = [
     id: 'financeiro',
     rotulo: 'Financeiro',
     vazio: 'Quando houver cobranças ou contas vencidas ou vencendo hoje, o aviso aparece aqui.',
+  },
+  {
+    id: 'agenda',
+    rotulo: 'Agenda',
+    vazio: 'Os lembretes dos seus eventos e tarefas aparecem aqui, na hora que você escolher.',
   },
 ];
 

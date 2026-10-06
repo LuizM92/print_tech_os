@@ -316,6 +316,85 @@ comprovante. O limite de crédito do cliente só **avisa** no modal de gerar cob
 
 ---
 
+## Agenda
+
+A tela **Agenda** (no topo do menu, abaixo do Dashboard) é um calendário no estilo do
+Google Agenda: **eventos**, **tarefas** e **lembretes**, em quatro visões — **Mês**,
+**Semana**, **Dia** e **Agenda** (a lista, que é a visão padrão no celular, onde a grade do
+mês fica apertada). A semana começa no domingo.
+
+| | Evento | Tarefa |
+|---|---|---|
+| O que é | compromisso com dia e hora (ou dia inteiro) | algo a fazer, com caixinha de concluir |
+| Duração | início e fim; pode atravessar a meia-noite e vários dias | um dia só, horário opcional |
+| Repetição | diária, semanal, mensal, anual (a cada N, com data final opcional) | não se repete |
+| Lembretes | até 5, de "no horário" a "1 semana antes" | idem; tarefa concluída não avisa mais |
+
+Criar é como no Google: **clicar num dia** (mês) ou **numa faixa de horário** (semana e dia,
+de 30 em 30 minutos) abre o formulário já preenchido; clicar num item abre os detalhes, de
+onde se edita, exclui ou conclui. Cada item tem **cor**, **local** e **descrição**.
+
+### Quem vê, quem recebe o lembrete
+
+- Todo item é **compartilhado** por padrão — a equipe vê a agenda da oficina. Marcado como
+  **privado**, só quem criou vê (o administrador também não).
+- Quem **edita ou exclui** é quem criou e o administrador. **Concluir uma tarefa** é de
+  qualquer um que a veja: é uma lista da equipe.
+- O lembrete vai para o **responsável**, se houver; para **todos**, se marcado; senão para
+  quem criou. Chega no **sino** (aba *Agenda*) e por **push** no aparelho de quem ativou os
+  alertas — é uma notificação pessoal, só aparece no sino de quem recebe.
+
+### Camadas do sistema
+
+Sem cadastrar nada, o calendário mostra, só para leitura, o que o resto do sistema já sabe:
+
+- **Entregas das OS** — a previsão de entrega das OS aprovadas ainda não entregues;
+- **A receber** — o que vence em cada dia, somado ("2 contas a receber · R$ 150,50");
+- **A pagar** — idem, só para o administrador.
+
+Cada camada liga e desliga nos botões acima do calendário (a escolha fica no navegador), e
+clicar abre a tela de origem — a OS, ou a lista de contas já filtrada pelo dia.
+
+### Repetição
+
+Evento que se repete é **uma linha só** no banco; as ocorrências são calculadas para o
+intervalo que a tela pediu (`utils/agenda/ocorrencias.js`). "Toda segunda, sem data final"
+não enche a tabela e mudar o evento muda todas de uma vez. Como nas despesas recorrentes,
+cada data é contada a partir do início da série: um evento do dia 31 cai em 28/02 e volta
+ao 31 em março.
+
+- **Excluir** pergunta quanto apagar: *só este*, *este e os seguintes* (encurta a série até
+  o dia anterior) ou *todos*.
+- **Editar** vale para a série toda. Mudar a data de uma ocorrência desloca o início da
+  série pelo mesmo número de dias — mexer na terceira segunda-feira para terça move todas
+  para terça, em vez de jogar o evento de volta para a primeira.
+- Ainda não existe "editar só este".
+
+### Como o lembrete dispara
+
+O servidor olha a agenda **a cada minuto** (`utils/agenda/avisos.js`). Um lembrete é "N
+minutos antes do início"; item sem horário (dia inteiro, tarefa do dia) conta a partir das
+**08:00**, a mesma hora do aviso de vencimentos.
+
+- **Uma vez só, mesmo reiniciando.** O app reinicia a cada deploy; a trava é uma linha em
+  `agenda_avisos` por (item, dia da ocorrência, lembrete), decidida por `INSERT IGNORE`.
+- **A janela é a última hora.** Um deploy de poucos minutos não faz perder o lembrete, mas
+  o que ficou horas para trás é descartado — acordar com o sistema despejando os avisos de
+  ontem não ajuda ninguém.
+- **Ao salvar, o que já passou é marcado como enviado.** Marcar um evento para daqui a dez
+  minutos com "30 min antes" não dispara na hora um lembrete que já passou. Mudar o horário
+  de um evento rearma os lembretes dele.
+- Horário é **horário de Brasília**, em colunas `DATE` e `TIME` separadas (e não `DATETIME`):
+  o servidor roda em UTC, e um instante seria deslocado de fuso no caminho.
+
+### Limites conhecidos
+
+Sem convidados nem confirmação de presença, sem arrastar o item para outro horário, sem
+fusos diferentes e sem sincronizar com o Google. A repetição semanal é no dia da semana do
+início (não dá para marcar "segunda, quarta e sexta" num evento só).
+
+---
+
 ## Módulo de fabricação
 
 A tela **Fabricação** (no menu, em Oficina) é o cadastro do que a gente **fabrica** —
@@ -484,7 +563,7 @@ O menu é dividido em grupos que seguem a ordem do negócio:
 
 | Grupo | Telas |
 |---|---|
-| — | Dashboard |
+| — | Dashboard, Agenda |
 | **Comercial** | Orçamentos, Vendas, Clientes |
 | **Oficina** | Produção (fila das OS), Fabricação (catálogo de SKU próprio) |
 | **Financeiro** | A receber, A pagar e Fornecedores (os dois últimos só admin) |
@@ -591,7 +670,9 @@ inscrição estadual (ou o marcador de isento) na próxima vez que você editar 
 
 A `017` acrescenta o financeiro (contas a receber e a pagar). Só **cria** tabelas e uma
 coluna em `notificacoes`; nenhum dado existente é tocado e é seguro repetir. A `018`
-acrescenta as despesas recorrentes: uma tabela nova e uma coluna em `lancamentos`.
+acrescenta as despesas recorrentes: uma tabela nova e uma coluna em `lancamentos`. A `019`
+acrescenta a agenda: quatro tabelas novas e uma coluna (`usuario_id`) em `notificacoes`;
+também só **cria**, e é seguro repetir.
 
 Confira o resultado antes de seguir:
 
@@ -645,6 +726,9 @@ O que os testes cobrem:
 - **Financeiro** — entrada + saldo fechando o total em centavos, parcelas e vencimentos de
   fim de mês, situação da conta (incluindo 22h de Brasília, que em UTC já é o dia seguinte),
   baixa parcial, desconto, estorno, divergência da cobrança e o texto do aviso de vencimento.
+- **Agenda** — repetição (semanal, a cada N, dia 31 em mês curto, ocorrência apagada, evento
+  de vários dias), validação do formulário, e quando cada lembrete dispara (janela, meia-noite,
+  item sem horário, texto do aviso).
 - **Filtros do dashboard** — período, enums, ids, faixa de valor, busca em tabela filha,
   granularidade do gráfico e recusa de entrada inválida.
 
@@ -663,6 +747,9 @@ O que os testes cobrem:
 | Configurações (hora-máquina) | ✅ | ❌ (só visualiza) |
 | Financeiro: receber (gerar cobrança, registrar recebimento) | ✅ | ✅ |
 | Financeiro: estornar, cancelar, pagar, fornecedores | ✅ | ❌ |
+| Agenda: criar eventos e tarefas, concluir tarefas | ✅ | ✅ |
+| Agenda: editar e excluir | ✅ (de todos) | só o que criou |
+| Agenda: camada "A pagar" no calendário | ✅ | ❌ |
 
 ---
 
@@ -732,6 +819,16 @@ categorias_despesa  → id, nome, ativo
 financeiro_avisos   → dia, tipo   (trava do aviso diário de vencimentos)
 recorrencias        → id, descricao, frequencia (semanal|mensal|anual), inicio, fim, valor,
                       categoria_id, fornecedor_id   (lancamentos.recorrencia_id aponta para ela)
+
+agenda_itens        → id, tipo (evento|tarefa), titulo, descricao, lugar, cor, data_inicio,
+                      hora_inicio (NULL = dia inteiro), data_fim (inclusive), hora_fim,
+                      repete (nao|diaria|semanal|mensal|anual), repete_cada, repete_ate,
+                      privado, para_todos, responsavel_id, concluida_em, concluida_por,
+                      criado_por   (a repetição é calculada, não gravada)
+agenda_lembretes    → item_id, minutos   (minutos antes do início; vários por item)
+agenda_excecoes     → item_id, data      (ocorrências apagadas de uma série)
+agenda_avisos       → item_id, data, minutos   (trava: este lembrete desta ocorrência já saiu)
+notificacoes        → ..., usuario_id   (preenchido = só daquele usuário; lembrete de agenda)
 
 contadores          → chave, valor   (numeração sequencial por mês)
 schema_migrations   → versao, aplicada_em
@@ -834,6 +931,14 @@ POST   /api/pagar/:id/serie/cancelar        cancela esta e as próximas em abert
 PUT    /api/pagar/:id/serie/valor           reajusta o valor desta e das próximas (mesma regra)
 GET/POST/PUT/DELETE /api/fornecedores       (admin)
 GET/POST/PUT/DELETE /api/categorias-despesa (admin)
+
+  # agenda — todos os perfis; privado é só de quem criou, editar/excluir é de quem criou e do admin
+GET    /api/agenda                          ?de&ate (até 100 dias) — ocorrências + camadas (OS, a receber, a pagar)
+GET    /api/agenda/responsaveis             usuários ativos, para escolher quem recebe o lembrete
+POST   /api/agenda                          cria evento ou tarefa (tipo, título, data/hora, repetição, lembretes[])
+PUT    /api/agenda/:id                      edita; `ocorrencia` = o dia clicado, quando o evento se repete
+DELETE /api/agenda/:id                      ?escopo(todos|esta|seguintes)&data — o que apagar numa série
+POST   /api/agenda/:id/concluir             tarefa: { concluida: true|false }
 
   # orçamento de impressão
 POST   /api/orcamentos                      cria com itens aninhados

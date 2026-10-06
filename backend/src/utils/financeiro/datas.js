@@ -15,7 +15,7 @@ const FUSO = 'America/Sao_Paulo';
 const partesNoFuso = (agora) => {
   const formato = new Intl.DateTimeFormat('en-US', {
     timeZone: FUSO, hourCycle: 'h23',
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
   });
   return Object.fromEntries(formato.formatToParts(agora).map((p) => [p.type, p.value]));
 };
@@ -69,6 +69,26 @@ const diasEntre = (de, ate) => {
 /** 2026-10-04 → 04/10/2026, sem passar por `Date` (e sem o deslocamento de fuso dele). */
 const formatarDia = (iso) => iso.split('-').reverse().join('/');
 
+/**
+ * Um dia e uma hora de relógio (AAAA-MM-DD, HH:MM) como um número de minutos. É o relógio
+ * de parede tratado como se fosse UTC — não é um instante real, mas serve para comparar e
+ * subtrair ("30 minutos antes") sem fuso nem horário de verão no meio.
+ */
+const instante = (dia, hora = '00:00') => {
+  const [a, m, d] = separar(dia);
+  const [h, min] = hora.split(':').map((n) => parseInt(n, 10));
+  return Date.UTC(a, m - 1, d, h, min) / 60000;
+};
+
+/** O instante de agora em Brasília, na mesma escala de `instante`. */
+const agoraBR = (agora = new Date()) => {
+  const p = partesNoFuso(agora);
+  return instante(`${p.year}-${p.month}-${p.day}`, `${p.hour}:${p.minute}`);
+};
+
+/** O dia (AAAA-MM-DD) de um instante. */
+const diaDoInstante = (minutos) => paraISO(new Date(minutos * 60000));
+
 const primeiroDiaDoMes = (iso) => `${iso.slice(0, 8)}01`;
 
 const ultimoDiaDoMes = (iso) => {
@@ -78,5 +98,5 @@ const ultimoDiaDoMes = (iso) => {
 
 module.exports = {
   hojeBR, horaBR, ehDataISO, somarDias, somarMeses, diasEntre, formatarDia,
-  primeiroDiaDoMes, ultimoDiaDoMes,
+  instante, agoraBR, diaDoInstante, primeiroDiaDoMes, ultimoDiaDoMes,
 };

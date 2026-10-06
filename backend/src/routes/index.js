@@ -83,6 +83,7 @@ const notificacoesCtrl = require('../controllers/notificacoesController');
 const lancamentosCtrl = require('../controllers/lancamentosController');
 const fornecedoresCtrl = require('../controllers/fornecedoresController');
 const categoriasDespesaCtrl = require('../controllers/categoriasDespesaController');
+const agendaCtrl = require('../controllers/agendaController');
 
 // Auth
 router.post('/auth/login', authCtrl.login);
@@ -173,6 +174,16 @@ router.post('/alertas/teste', autenticar, alertasCtrl.teste);
 router.get('/notificacoes', autenticar, notificacoesCtrl.listar);
 router.post('/notificacoes/lidas', autenticar, notificacoesCtrl.marcarTodas);
 router.post('/notificacoes/:id/lida', autenticar, notificacoesCtrl.marcarLida);
+
+// Agenda — eventos e tarefas, de todos os perfis. O que cada um vê (privado é só do autor)
+// e quem pode editar (o autor e o admin) é decidido no controller.
+// /responsaveis vem antes de /:id — senão o Express trata 'responsaveis' como um id.
+router.get('/agenda', autenticar, agendaCtrl.listar);
+router.get('/agenda/responsaveis', autenticar, agendaCtrl.responsaveis);
+router.post('/agenda', autenticar, agendaCtrl.criar);
+router.put('/agenda/:id', autenticar, agendaCtrl.atualizar);
+router.delete('/agenda/:id', autenticar, agendaCtrl.excluir);
+router.post('/agenda/:id/concluir', autenticar, agendaCtrl.concluir);
 
 // Financeiro — contas a receber e a pagar. É o mesmo controller nos dois lados: o
 // prefixo diz a natureza (req.natureza) e o controller filtra por ela, então /receber

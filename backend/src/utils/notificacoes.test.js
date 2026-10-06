@@ -16,3 +16,8 @@ test('tipo desconhecido não some: cai em impressão', () => {
   assert.strictEqual(categoriaDe('aviso'), 'impressao');
   assert.ok(CATEGORIAS.includes(categoriaDe('qualquer-coisa')));
 });
+
+test('os lembretes da agenda vão para a aba agenda', () => {
+  assert.strictEqual(categoriaDe('agenda'), 'agenda');
+  assert.ok(CATEGORIAS.includes('agenda'));
+});

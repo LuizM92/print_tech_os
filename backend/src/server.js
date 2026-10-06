@@ -47,4 +47,5 @@ app.listen(PORT, '0.0.0.0',() => {
   console.log(`📡 API disponível em http://localhost:${PORT}/api`);
   require('./utils/impressoras/monitor').iniciar();
   require('./utils/financeiro/avisos').iniciar();
+  require('./utils/agenda/avisos').iniciar();
 });

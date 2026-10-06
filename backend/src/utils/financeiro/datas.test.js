@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const {
   hojeBR, horaBR, ehDataISO, somarDias, somarMeses, diasEntre, primeiroDiaDoMes, ultimoDiaDoMes,
+  instante, agoraBR, diaDoInstante,
 } = require('./datas');
 
 test('às 22h de Brasília o servidor (UTC) já está no dia seguinte, mas o hoje é o de Brasília', () => {
@@ -55,4 +56,17 @@ test('limites do mês', () => {
   assert.strictEqual(ultimoDiaDoMes('2026-10-17'), '2026-10-31');
   assert.strictEqual(ultimoDiaDoMes('2026-02-03'), '2026-02-28');
   assert.strictEqual(ultimoDiaDoMes('2028-02-03'), '2028-02-29');
+});
+
+test('instante é o relógio de parede em minutos: subtrai e compara sem fuso', () => {
+  assert.strictEqual(instante('2026-10-06', '14:00') - instante('2026-10-06', '13:30'), 30);
+  assert.strictEqual(instante('2026-10-06', '00:00') - instante('2026-10-05', '23:50'), 10);
+  assert.strictEqual(instante('2026-10-06') - instante('2026-10-05'), 1440);
+});
+
+test('agoraBR usa o relógio de Brasília e diaDoInstante devolve o dia dele', () => {
+  const vinteDuasEmBrasilia = new Date('2026-10-05T01:00:00Z');   // UTC já é dia 5
+  assert.strictEqual(agoraBR(vinteDuasEmBrasilia), instante('2026-10-04', '22:00'));
+  assert.strictEqual(diaDoInstante(agoraBR(vinteDuasEmBrasilia)), '2026-10-04');
+  assert.strictEqual(diaDoInstante(instante('2026-10-06', '23:59')), '2026-10-06');
 });
